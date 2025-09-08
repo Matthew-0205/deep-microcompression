@@ -7,12 +7,10 @@ __all__ = [
     "Sequential"
 ]
 
-import copy
-import math
+import copy, math, random, itertools
 from os import path
-import itertools
 from typing import (
-    List, Dict, OrderedDict, Iterable, Callable, Optional, Union
+    List, Tuple, Dict, OrderedDict, Iterable, Callable, Optional, Union
 )
 from tqdm.auto import tqdm
 
@@ -37,7 +35,6 @@ from ..utils import (
     QuantizationScaleType,
     QuantizationGranularity,
 )
-
 from .fuse import *
 
 class Sequential(nn.Sequential):
@@ -69,7 +66,7 @@ class Sequential(nn.Sequential):
             
             # Auto-name layers with type_index convention (e.g. conv2d_0)
             for layer in args:
-                if isinstance(layer, Layer) and isinstance(layer, nn.Module): 
+                if isinstance(layer, Layer) or isinstance(layer, nn.Module): 
                     idx = self.class_idx.get(layer.__class__.__name__, -1) + 1
                     self.class_idx[layer.__class__.__name__] = idx
                     layer_type = layer.__class__.__name__.lower()
@@ -162,14 +159,15 @@ class Sequential(nn.Sequential):
 
 
     def fit(
-        self, train_dataloader: data.DataLoader, epochs: int, 
+        self, train_dataloader: Union[data.DataLoader, Tuple], epochs: int, 
         criterion_fun: torch.nn.Module, 
         optimizer_fun: torch.optim.Optimizer,
         lr_scheduler: Optional[torch.optim.lr_scheduler.LRScheduler] = None,
-        validation_dataloader: Optional[data.DataLoader] = None, 
+        validation_dataloader: Optional[Union[data.DataLoader, Tuple]] = None, 
         metrics: Dict[str, Callable[[torch.Tensor, torch.Tensor], float]] = {},
         verbose: bool = True,
         callbacks: List[Callable] = [],
+        batch_size = 32,
         device: str = "cpu"
     ) -> Dict[str, List[float]]:
         """Training loop with optional validation and metrics tracking
@@ -186,6 +184,28 @@ class Sequential(nn.Sequential):
         """
         history = dict()
         metrics_values = dict()
+
+        if isinstance(train_dataloader, tuple):
+            assert len(train_dataloader) == 2, "Contains more than 2 elements"
+            class Dataset(torch.utils.data.Dataset):
+
+                def __init__(self, train_dataloader) -> None:
+                    self.X, self.y = train_dataloader
+                    assert len(self.X) == len(self.y)
+
+                    print(self.X.shape, len(self.X), len(self.y), self.y.shape)
+
+                def __len__(self):
+                    return len(self.y)
+                
+                def __getitem__(self, index):
+                    return self.X[index], self.y[index]
+                
+            train_dataloader = torch.utils.data.DataLoader(Dataset(train_dataloader), batch_size=batch_size, shuffle=True)
+
+            if validation_dataloader is not None and isinstance(validation_dataloader, tuple):
+                assert len(validation_dataloader) == 2, "Contains more than 2 elements"
+                validation_dataloader = torch.utils.data.DataLoader(Dataset(validation_dataloader), batch_size=batch_size, shuffle=False)
 
         for epoch in tqdm(range(epochs)):
             # Training phase
@@ -388,36 +408,6 @@ class Sequential(nn.Sequential):
                 fused_model.add_module(*names_layers[i])
                 i += 1
 
-
-
-            #     if i+2 <  length and isinstance(self[names[i+1]], (BatchNorm2d)) and isinstance(self[names[i+2]], ReLU):
-            #         fused_conv2d_batchnorm2d_layer = fuse_conv2d_batchnorm2d(self[names[i]], self[names[i+1]])
-            #         fused_conv2d_batchnorm2d_relu_layer = fuse_conv2d_relu(fused_conv2d_batchnorm2d_layer, self[names[i+2]])
-            #         fused_model.add_module(names[i], fused_conv2d_batchnorm2d_relu_layer)
-            #         i += 3
-            #     elif i+1 <  length and isinstance(self[names[i+1]], (BatchNorm2d)):
-            #         fused_conv2d_batchnorm2d_layer = fuse_conv2d_batchnorm2d(self[names[i]], self[names[i+1]])
-            #         fused_model.add_module(names[i], fused_conv2d_batchnorm2d_layer)
-            #         i += 2
-            #     elif i+1 <  length and isinstance(self[names[i+1]], ReLU):
-            #         fused_conv2d_relu_layer = fuse_conv2d_relu(self[names[i]], self[names[i+1]])
-            #         fused_model.add_module(names[i], fused_conv2d_relu_layer)
-            #         i += 2
-            #     else: 
-            #         fused_model.add_module(*names_layers[i])
-            #         i += 1
-            # elif isinstance(self[names[i]], Linear):
-            #     if i+1 <  length and isinstance(self[names[i+1]], ReLU):
-            #         fused_linear_relu_layer = fuse_linear_relu(self[names[i]], self[names[i+1]])
-            #         fused_model.add_module(names[i], fused_linear_relu_layer)
-            #         i += 2                
-            #     else: 
-            #         fused_model.add_module(*names_layers[i])
-            #         i += 1
-            # else:
-            #     fused_model.add_module(*names_layers[i])
-            #     i += 1
-
         return fused_model
 
         
@@ -517,9 +507,6 @@ class Sequential(nn.Sequential):
                         if name not in self.names():
                             return False
                             # raise NameError(f"Found unknown layer name {name}")
-                        if not self[name].is_prunable():
-                            return False
-                            # raise ValueError(f"layer of name {name} is not prunable")
                         if not isinstance(layer_sparsity, float) and layer_sparsity not in self[name].get_prune_channel_possible_hypermeters():
                             return False
                             # raise ValueError(f"Recieved a layer_sparsity of {layer_sparsity} ")
@@ -556,7 +543,7 @@ class Sequential(nn.Sequential):
     def get_prune_channel_possible_hypermeters(self):
         prune_possible_hypermeters = dict()
 
-        for name, layer in self.names_layers():
+        for name, layer in list(self.names_layers())[:-1]:
             layer_prune_possible_hypermeters = layer.get_prune_channel_possible_hypermeters()
             if layer_prune_possible_hypermeters is not None:
                 prune_possible_hypermeters[name] = layer_prune_possible_hypermeters
@@ -666,7 +653,7 @@ class Sequential(nn.Sequential):
 
 
 
-    def get_max_workspace_arena(self, input_shape) -> tuple:
+    def get_max_workspace_arena(self, input_shape) -> Tuple:
         """Calculate memory requirements for C deployment by running sample input
         
         Returns:
@@ -863,11 +850,125 @@ class Sequential(nn.Sequential):
 
 
 
+    def get_layers_prune_channel_sensity_(
+        self, 
+        input_shape, 
+        data_loader, 
+        metrics, 
+        device="cpu",
+        train = False,
+        train_dataloader = None,
+        epochs = None,
+        criterion_fun = None,
+        optimizer_fun = None,
+        lr_scheduler = None,
+        callbacks = [],
+    ) -> Dict[str, Dict[str, List[Tuple[int, float]]]]:
+
+        prune_channel_hp = self.get_prune_channel_possible_hypermeters()
+        prune_channel_layers_sensity = dict.fromkeys(metrics.keys(), dict())
+
+        if train:
+            assert train_dataloader is not None
+            assert epochs is not None
+            assert criterion_fun is not None
+            assert optimizer_fun is not None
+
+        i = 0
+        for layer_name, layer_prune_channel_hp in prune_channel_hp.items():
+
+            for metric_name in metrics.keys():
+                prune_channel_layers_sensity[metric_name].update({layer_name : list()})
+
+            max_layer_prune_channel_hp = layer_prune_channel_hp.stop
+            for layer_prune_channel in layer_prune_channel_hp:
+                compression_config = {
+                    "prune_channel" :{
+                        "sparsity" : {
+                            layer_name: layer_prune_channel
+                        },
+                        "metric" : "l2"
+                    },
+                }
+                prune_channel_model = self.init_compress(config=compression_config, input_shape=input_shape)
+                prune_channel_model_metrics = prune_channel_model.evaluate(data_loader=data_loader, metrics=metrics, device=device)
+
+                if train:
+                    optimizer_fun = torch.optim.SGD(prune_channel_model.parameters(), lr=1e-3, momentum=.9, weight_decay=5e-4)
+                    lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer_fun, mode="min", patience=1)
+
+                    prune_channel_model.fit(
+                        train_dataloader=train_dataloader,
+                        epochs=epochs,
+                        criterion_fun=criterion_fun,
+                        optimizer_fun=optimizer_fun,
+                        lr_scheduler=lr_scheduler,
+                        validation_dataloader=data_loader,
+                        metrics=metrics,
+                        verbose=False,
+                        callbacks=callbacks,
+                        device=device
+                    )
+
+                    prune_channel_model_metrics_train = prune_channel_model.evaluate(data_loader=data_loader, metrics=metrics, device=device)
+
+                    for metric_name in metrics.keys():
+                        prune_channel_layers_sensity[metric_name][layer_name].append((layer_prune_channel/max_layer_prune_channel_hp, prune_channel_model_metrics[metric_name], prune_channel_model_metrics_train[metric_name]))
+                else:
+                    for metric_name in metrics.keys():
+                        prune_channel_layers_sensity[metric_name][layer_name].append((layer_prune_channel/max_layer_prune_channel_hp, prune_channel_model_metrics[metric_name]))
+
+        return prune_channel_layers_sensity
+    
+    @torch.no_grad()
+    def get_nas_prune_channel(
+        self,
+        input_shape, 
+        data_loader, 
+        metric_fun, 
+        device="cpu",
+        num_data=100
+    ) -> List:
+        
+        def get_all_combinations(flat_dict: dict[str, object]):
+            keys = list(flat_dict.keys())
+            values = list(flat_dict.values())
+            product = itertools.product(*values)
+
+            yield from (comb for comb in product)
+        
+
+        prune_channel_hp = self.get_prune_channel_possible_hypermeters()
+        param = []
+
+        for _ in range(num_data):
+            prune_param_config = dict()
+            prune_param = list()
+            for layer_name, layer_prune_channel_hp in prune_channel_hp.items():
+                random_layer_prune_channel_hp = random.choice(layer_prune_channel_hp)
+                prune_param.append(random_layer_prune_channel_hp)
+                prune_param_config[layer_name] = random_layer_prune_channel_hp
+
+            compression_config = {
+                    "prune_channel" :{
+                        "sparsity" : prune_param_config,
+                        "metric" : "l2"
+                    },
+                }
+            
+            prune_channel_model = self.init_compress(config=compression_config, input_shape=input_shape)
+            prune_channel_model_metric = prune_channel_model.evaluate(data_loader=data_loader, metrics={"metric": metric_fun}, device=device)
+
+            param.append(prune_param + [prune_channel_model_metric["metric"]])
+            torch.cuda.empty_cache()
+        return param
+
+    
+ 
+        
 
 
-
-
-
+        
     
 
     def get_weight_distributions(self, bins=256) -> Dict[str, Optional[torch.Tensor]]:
@@ -1163,4 +1264,3 @@ class Sequential(nn.Sequential):
         model.register_buffer("output_zero_point", input_zero_point)
 
         return model
-#
