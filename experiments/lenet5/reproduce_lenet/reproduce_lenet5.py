@@ -8,7 +8,7 @@ from torchvision import datasets, transforms
 from tqdm.auto import tqdm
 
 # This assumes the script is in 'project_root/experiments/lenet5/'
-sys.path.append("../../")
+sys.path.append("../../../")
 
 try:
     from development import (
@@ -27,7 +27,7 @@ try:
 except ImportError:
     print("Error: Could not import the 'development' module.")
     print("Please ensure this script is run from 'experiments/lenet5/'")
-    print("and the 'development' module is in the project root ('../../').")
+    print("and the 'development' module is in the project root ('../../../').")
     sys.exit(1)
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -62,8 +62,8 @@ def get_data_loaders():
     mnist_train_dataset = datasets.MNIST("../../../Datasets/", train=True, download=True, transform=data_transform)
     mnist_test_dataset = datasets.MNIST("../../../Datasets/", train=False, download=True, transform=data_transform)
     
-    mnist_train_loader = data.DataLoader(mnist_train_dataset, batch_size=32, shuffle=True, num_workers=os.cpu_count(), drop_last=False)
-    mnist_test_loader = data.DataLoader(mnist_test_dataset, batch_size=32, shuffle=False, num_workers=os.cpu_count(), drop_last=False)
+    mnist_train_loader = data.DataLoader(mnist_train_dataset, batch_size=32, shuffle=True, num_workers=os.cpu_count(), drop_last=False) # type: ignore
+    mnist_test_loader = data.DataLoader(mnist_test_dataset, batch_size=32, shuffle=False, num_workers=os.cpu_count(), drop_last=False) # type: ignore
     
     return mnist_train_loader, mnist_test_loader
 
@@ -244,7 +244,7 @@ if __name__ == "__main__":
     print(f"\n===> Layerwise Prunning Results:")
     for i, (name, module) in enumerate(pruned_model.names_layers()):
         if ("conv2d" in name) or ("linear" in name):
-            print(f"    Layer name : {name},  Size Ratio: {(1 - module.get_size_in_bits()/baseline_model[i].get_size_in_bits())*100:.2f}%")
+            print(f"    Layer name : {name},  Size Ratio: {(1 - module.get_size_in_bits()/baseline_model[i].get_size_in_bits())*100:.2f}%") # type: ignore
 
 
     # --- STAGE 3: QUANTIZED-PRUNED ---

@@ -9,8 +9,6 @@ echo "\n--- Installing dependencies (torch, torchvision, tqdm, matplotlib) ---"
 pip install torch torchvision tqdm matplotlib
 
 echo "\n--- Starting experiment reproduction (reproduce_lenet5.py) ---"
-# Set a lucky number for reproducibility in case the script doesn't
-export CUBLAS_WORKSPACE_CONFIG=:4096:8
 python reproduce_lenet5.py
 
 echo "\n--- Cleaning up ---"

@@ -1,15 +1,9 @@
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
+
 import os
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
-# os.environ["ABSL_LOGGING"] = "0"
-# os.environ["XLA_FLAGS"] = "--xla_gpu_enable_triton=false"
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
-
-# Redirect stderr only during TensorFlow import
-import sys
-stderr = sys.stderr
-sys.stderr = open(os.devnull, "w")
-import tensorflow as tf
-sys.stderr = stderr
 
 import sys
 import os
@@ -22,20 +16,10 @@ from torchvision import datasets, transforms
 from tqdm.auto import tqdm
 import numpy as np
 
-import warnings
-warnings.filterwarnings("ignore", category=UserWarning)
-# os.environ['ABSL_LOGGING'] = '0'
-# os.environ["XLA_FLAGS"] = "--xla_gpu_enable_triton=false --xla_gpu_cuda_data_dir=/usr/local/cuda"
-
-# # --- Suppress TensorFlow Info/Warnings ---
-# os.environ["CUDA_VISIBLE_DEVICES"] = "-1"  # Force TF to CPU for fair comparison
-# # os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"   # Suppress TF info messages
-# os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"  # hides INFO, WARNING, ERROR; only FATAL remains
-
 import tensorflow as tf
-from tensorflow.keras.datasets import mnist
+from tensorflow.keras.datasets import mnist # type: ignore
 
-sys.path.append("../../")
+sys.path.append("../../../")
 
 try:
     from development import (
@@ -45,7 +29,7 @@ try:
 except ImportError:
     print("Error: Could not import the 'development' module.")
     print("Please ensure this script is run from 'experiments/lenet5/'")
-    print("and the 'development' module is in the project root ('../../').")
+    print("and the 'development' module is in the project root ('../../../').")
     sys.exit(1)
 
 # --- Constants ---
