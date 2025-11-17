@@ -12,18 +12,18 @@ This script assumes it is located within the original project's directory struct
 
 Open your terminal and navigate to this directory:
 ```
-cd path/to/your/project/experiments/lenet5/reproduce_tflite
+cd path/to/your/project/experiments/lenet5/reproduce_table4
 ```
 
 Make the bash script executable:
 ```
-chmod +x setup_and_run_tflite.sh
+chmod +x setup_and_run_table4.sh
 ```
 
 Run the script. It will create a local Python virtual environment (venv/), install all required packages (including tensorflow), and then execute the experiment.
 
 ```
-./setup_and_run_tflite.sh
+./setup_and_run_table4.sh
 ```
 
 ## What to Expect
