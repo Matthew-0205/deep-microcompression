@@ -2,9 +2,15 @@ import sys
 import os
 import shutil 
 
-if __name__ == "__main__":
+import argparse
 
-    lib_dir = sys.argv[1]
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser("generate_dmc_library_tree", 
+                            description="This program generates the deep microcompression library in your specified lib director.")
+    parser.add_argument("lib_dir", help="This is the base of the lib directory where the library tree would be created.")
+
+    args = parser.parse_args()
+    lib_dir = args.lib_dir
 
     deploment_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../deployment/")) 
     destination_dir = os.path.join(lib_dir, "deep_microcompression")
