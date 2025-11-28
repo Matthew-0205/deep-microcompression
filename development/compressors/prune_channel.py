@@ -29,21 +29,21 @@ class Prune_Channel:
     """
     def __init__(
         self, 
-        module: Layer, 
+        layer: Layer, 
         keep_current_channel_index: torch.Tensor, 
-        keep_prev_channel_index: torch.Tensor,
+        keep_prev_channel_index: Optional[torch.Tensor] = None,
     ) -> None:
         """
         Initialize Pruning Controller.
 
         Args:
-            module: The layer being pruned.
+            layer: The layer being pruned.
             keep_current_channel_index: Indices of Output Channels (Filters) to keep.
                                         Determines the layer's output dimension.
             keep_prev_channel_index: Indices of Input Channels to keep.
                                      Must align with the previous layer's remaining filters.
         """
-        self.module = module
+        self.layer = layer
         self.keep_current_channel_index = keep_current_channel_index
         self.keep_prev_channel_index = keep_prev_channel_index
 
@@ -56,7 +56,7 @@ class Prune_Channel:
         reduce tensor size, but multiplies pruned weights by zero so the 
         network learns to function without them.
         """
-        if self.module.training:
+        if self.layer.training:
             self.update_parameters(x)
         return self.fake_apply(x)
     
@@ -77,6 +77,7 @@ class Prune_Channel:
         simulates the sparsity effects.
         """
         if x.ndim > 1:
+            assert self.keep_prev_channel_index is not None, "Tensor with ndim > 1 cannot be pruned without keep_prev_channel_index"
             # Removing connections from previous layers
             mask_prev_channel = torch.zeros_like(x)
 
@@ -111,6 +112,7 @@ class Prune_Channel:
             A smaller tensor containing only the kept parameters.
         """
         if x.ndim > 1:
+            assert self.keep_prev_channel_index is not None, "Tensor with ndim > 1 cannot be pruned without keep_prev_channel_index"
             x = torch.index_select(x, 1, self.keep_prev_channel_index)
             x = torch.index_select(x, 0, self.keep_current_channel_index)
         else:
