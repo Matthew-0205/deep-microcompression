@@ -1,10 +1,15 @@
 """
 @file flatten.py
-@brief PyTorch implementation of Flatten layer with support for:
-    1. Standard flatten operation
-    2. Static quantization pass-through
-    3. Channel pruning coordination
-    4. C code generation for deployment
+@brief Flatten Layer with Structured Pruning Coordination.
+
+    In the DMC pipeline, the Flatten layer is functionally simple (reshaping tensors)
+    but architecturally critical for Structured Pruning (Section III-A).
+
+    Role in Pruning:
+    When a Convolutional channel is pruned, an entire 2D feature map ($H \times W$) 
+    disappears. The Flatten layer must translate the "Surviving Channel Indices" 
+    into a list of "Surviving Flat Element Indices" so the subsequent Linear layer 
+    knows which input connections to remove.
 """
 
 from typing import Union
@@ -14,14 +19,15 @@ from torch import nn
 from .layer import Layer
 
 class Flatten(Layer, nn.Flatten):
-    """Quantization-aware Flatten layer that maintains:
-        - Standard flatten functionality
-        - Quantization state pass-through
-        - Channel pruning coordination
-        - C code generation support
+    """
+    DMC-aware Flatten layer.
     
-    Note: This layer doesn't perform actual quantization but preserves quantization
-    parameters through the network for adjacent layers.
+    Responsibilities:
+    1.  Shape Transformation: Standard NCHW -> N(C*H*W) flattening.
+    2.  Pruning Translation: Converts `keep_channel_mask` (spatial) to 
+        `keep_neuron_mask` (flat) for dense matrix connectivity.
+    3.  Quantization Pass-through: Preserves scale/zero-point metadata across
+        the shape change without modifying values.
     """
 
     def __init__(self, *args, **kwargs):
@@ -29,15 +35,7 @@ class Flatten(Layer, nn.Flatten):
         super().__init__(*args, **kwargs)
 
     def forward(self, input):
-        """Forward pass that flattens input while preserving shape information
-        
-        Args:
-            input: Input tensor of any shape
-            
-        Returns:
-            Flattened tensor according to start_dim and end_dim
-        """        
-        # return input.flatten(self.start_dim, self.end_dim)
+        """Forward pass preserving quantization context."""      
         return super().forward(input)
     
 
@@ -87,7 +85,12 @@ class Flatten(Layer, nn.Flatten):
         return None
     
     def init_quantize(self, bitwidth, scheme, granularity, previous_output_quantize = None):
-        # Nothing to do
+        """
+        Pass-through for quantization observers.
+        
+        Flattening does not change values, so the input scale/zero-point 
+        is identical to the output scale/zero-point.
+        """
         return previous_output_quantize
 
 
@@ -98,8 +101,8 @@ class Flatten(Layer, nn.Flatten):
         # Nothing to do
         pass
 
-    def get_output_tensor_shape(self, input_shape):
-
+    def get_output_tensor_shape(self, input_shape: torch.Size):
+        """Calculates flattened output shape."""
         return torch.Size((input_shape.numel(),)), torch.Size((input_shape.numel(),))
     
 
