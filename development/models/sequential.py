@@ -18,7 +18,6 @@ Pipeline Stages Managed by this Container:
 __all__ = [
     "Sequential"
 ]
-
 import copy, math, random, itertools
 from os import path
 from typing import (
