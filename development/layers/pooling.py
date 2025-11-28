@@ -5,6 +5,18 @@
     2. Static quantization (per-tensor and per-channel)
     3. C code generation for deployment
 """
+"""
+@file pooling.py
+@brief Pooling Layers (MaxPool2d, AvgPool2d) for DMC Pipeline.
+
+In the Deep Microcompression framework, pooling layers play a passive but critical role:
+1.  Structure Preservation: They must propagate pruning indices.
+    If Channel $k$ is pruned in `Conv_1`, then Channel $k$ in `MaxPool_1` is also dead,
+    and this information must be passed to `Conv_2`.
+2.  Quantization Pass-Through: MaxPool preserves quantization
+    scales (max of integers is effectively the same scale). AvgPool requires
+    re-quantization support (not implemented here, assumed fused or float fallback).
+"""
 
 from typing import Union
 
@@ -14,10 +26,14 @@ from torch import nn
 from .layer import Layer
 
 class MaxPool2d(Layer, nn.MaxPool2d):
-    """Quantization-aware MaxPool2d layer with support for:
-        - Standard max pooling operation
-        - Quantized inference modes
-        - C code generation for deployment
+    """
+    DMC-aware MaxPool2d layer.
+    
+    Responsibilities:
+    1.  Pruning Coordination: Forwards 'keep_channel_mask' unchanged.
+    2.  Quantization: Inherits scale/zero-point from previous layer (Max operation
+        on quantized int8 values works identical to float values).
+    3.  C-Generation: Exports kernel/stride/padding parameters for the bare-metal loop.
     """
 
     def __init__(self, *args, **kwargs):
@@ -25,13 +41,9 @@ class MaxPool2d(Layer, nn.MaxPool2d):
         super().__init__(*args, **kwargs)
 
     def forward(self, input):
-        """Forward pass through max pooling layer
-        
-        Args:
-            input: Input tensor (float or quantized)
-            
-        Returns:
-            Max pooled output tensor
+        """
+        Note: Since MaxPool operates on individual values, it natively supports 
+        Quantized Integers without modification (Max(int8) is valid).
         """
         return super().forward(input)
 
@@ -44,17 +56,7 @@ class MaxPool2d(Layer, nn.MaxPool2d):
         is_output_layer: bool = False, 
         metric: str = "l2"
     ):
-        """Placeholder for channel pruning (MaxPool doesn't have weights to prune)
-        
-        Args:
-            sparsity: Target sparsity ratio (unused)
-            keep_prev_channel_index: Channels to keep from previous layer
-            is_output_layer: Flag if this is an output layer (unused)
-            metric: Pruning metric (unused)
-            
-        Returns:
-            Original channel indices (no pruning implemented)
-        """
+        """Placeholder for channel pruning (MaxPool doesn't have weights to prune)"""
         super().init_prune_channel()
         # Nothing to do
         return keep_prev_channel_index
@@ -64,7 +66,12 @@ class MaxPool2d(Layer, nn.MaxPool2d):
         return None
 
     def init_quantize(self, bitwidth, scheme, granularity, previous_output_quantize = None):
-        # Nothing to do
+        """
+        Pass-through for Quantization Observers.
+        
+        Max Pooling does not alter the dynamic range of data, so the 
+        input scale/zero-point is valid for the output.
+        """
         return previous_output_quantize
 
     def get_size_in_bits(self):
@@ -77,7 +84,10 @@ class MaxPool2d(Layer, nn.MaxPool2d):
 
 
     def get_output_tensor_shape(self, input_shape):
-        
+        """
+        Calculates output spatial dimensions.
+        Used for SRAM workspace estimation (Section IV-A-3).
+        """
         C, H_in, W_in = input_shape
         
         def _pair(x): return x if isinstance(x, tuple) else (x, x)
@@ -96,13 +106,11 @@ class MaxPool2d(Layer, nn.MaxPool2d):
 
     @torch.no_grad()
     def convert_to_c(self, var_name, input_shape):
-        """Generate C code declarations for this layer
+        """
+        Generates C code for bare-metal deployment.
         
-        Args:
-            var_name: Variable name to use in generated code
-            
-        Returns:
-            Tuple of (header declaration, layer definition, parameter definition)
+        Exports structural parameters (Kernel, Stride, Padding) so the 
+        generic C implementation can execute the loop.
         """
         input_channel_size, input_row_size, input_col_size = input_shape
         kernel_size = self.kernel_size
@@ -123,7 +131,14 @@ class MaxPool2d(Layer, nn.MaxPool2d):
 
 
 class AvgPool2d(Layer, nn.AvgPool2d):
-
+    """
+    DMC-aware AvgPool2d layer.
+    
+    Note on Quantization: Average Pooling introduces non-integer values (sums/count).
+    In a strict integer-only pipeline (Static Quantization), this requires 
+    rescaling. The current implementation relies on the C-library's handling 
+    or assumes float fallback for AvgPool layers.
+    """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -147,17 +162,7 @@ class AvgPool2d(Layer, nn.AvgPool2d):
         is_output_layer: bool = False, 
         metric: str = "l2"
     ):
-        """Placeholder for channel pruning (MaxPool doesn't have weights to prune)
-        
-        Args:
-            sparsity: Target sparsity ratio (unused)
-            keep_prev_channel_index: Channels to keep from previous layer
-            is_output_layer: Flag if this is an output layer (unused)
-            metric: Pruning metric (unused)
-            
-        Returns:
-            Original channel indices (no pruning implemented)
-        """
+        """Placeholder for channel pruning (MaxPool doesn't have weights to prune)"""
         super().init_prune_channel()
         # Nothing to do
         return keep_prev_channel_index
@@ -168,7 +173,7 @@ class AvgPool2d(Layer, nn.AvgPool2d):
     
 
     def init_quantize(self, bitwidth, scheme, granularity, previous_output_quantize = None):
-        # Nothing to do
+        """Pass-through for quantization observers."""
         return previous_output_quantize
 
 
