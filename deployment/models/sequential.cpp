@@ -20,7 +20,7 @@
  * @param workspace Pre-allocated workspace buffer (float)
  * @param workspace_even_layer_size Size of even layer workspace partition
  * 
- * @note Uses double-buffering strategy to alternate between workspace_even_layer
+ * @note Uses ping-pong strategy to alternate between workspace_even_layer
  *       and workspace_odd_layer for memory efficiency
  */
 Sequential::Sequential(Layer **layers, uint32_t layers_len, float *workspace, 
@@ -68,7 +68,7 @@ Sequential::Sequential(Layer **layers, uint32_t layers_len, int8_t *workspace,
     this->workspace_even_layer = workspace;
     this->workspace_odd_layer = workspace + workspace_even_layer_size;
 
-    // Set model input/output buffers based on double-buffering strategy
+    // Set model input/output buffers based on ping-pong strategy
     this->input = this->workspace_even_layer;
     this->output = (layers_len % 2 == DLAI_EVEN) ? this->workspace_even_layer 
                                                : this->workspace_odd_layer;   

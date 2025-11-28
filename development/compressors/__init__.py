@@ -1,7 +1,15 @@
 from .prune_channel import Prune_Channel
-from .quantize import Quantize
+from .quantize import (
+    Quantize, 
+    QuantizationScheme,
+    QuantizationScaleType,
+    QuantizationGranularity,
+)
 
-__all__ = {
+__all__ = [
     "Prune_Channel",
-    "Quantize"
-}
+    "Quantize",
+    "QuantizationScheme",
+    "QuantizationScaleType",
+    "QuantizationGranularity",
+]
