@@ -60,8 +60,6 @@ class Flatten(Layer, nn.Flatten):
         Returns:
             Adjusted channel indices accounting for flatten operation
         """
-        super().init_prune_channel()
-
         # Calculate number of elements per channel in original input
         channel_numel = input_shape[1:].numel()
 

@@ -70,7 +70,6 @@ class ReLU(Layer, nn.ReLU):
             Original channel indices (no pruning implemented)
         """
         # Nothing to do
-        super().init_prune_channel()
         return keep_prev_channel_index
 
     def get_prune_channel_possible_hypermeters(self):
@@ -170,7 +169,6 @@ class ReLU6(Layer, nn.ReLU6):
         metric: str = "l2"
     ):
         # Propagate channel indices (Structured Pruning Support)
-        super().init_prune_channel()
         return keep_prev_channel_index
 
 
