@@ -33,8 +33,8 @@ except ImportError:
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"Using device: {DEVICE}")
 
-LUCKY_NUMBER = 10
-BASELINE_MODEL_FILE = "lenet5_state_dict.pth"
+LUCKY_NUMBER = 25
+BASELINE_MODEL_FILE = "lenet5_state_dict_old.pth"
 INPUT_SHAPE = (1, 28, 28)
 
 # Set random seed for reproducibility
@@ -86,7 +86,7 @@ def get_baseline_model():
 
 # --- 3. Training & Evaluation Functions ---
 def accuracy_fun(y_pred, y_true):
-    return (y_pred.argmax(dim=1) == y_true).sum().item() * 100
+    return (y_pred.argmax(dim=1) == y_true).to(torch.float).mean().item() * 100
 
 def train_baseline(model, train_loader, test_loader):
     print("\n--- STAGE 1: Training Baseline Model ---")
@@ -96,10 +96,10 @@ def train_baseline(model, train_loader, test_loader):
         model.to(DEVICE)
         return model
 
-    print(f"No baseline weights found. Training from scratch (up to 20 epochs)...")
+    print(f"No baseline weights found. Training from scratch (up to 15 epochs)...")
     early_stopper = EarlyStopper(
-        metric_name="validation_loss",
-        min_valid_diff=1e-7,
+        monitor_metric="validation_loss",
+        delta=1e-7,
         mode="min",
         patience=4,
         restore_best_state_dict=True,
@@ -109,7 +109,7 @@ def train_baseline(model, train_loader, test_loader):
     lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer_fun, mode="min", patience=2)
 
     model.fit(
-        train_loader, 20, 
+        train_loader, 15, 
         criterion_fun, optimizer_fun, lr_scheduler,
         validation_dataloader=test_loader, 
         metrics={"acc": accuracy_fun},
@@ -131,7 +131,7 @@ def train_pruned(baseline_model, train_loader, test_loader):
             "sparsity": {
                 "conv2d_0": 0,
                 "conv2d_1": 9,
-                "linear_0": 50
+                "linear_0": 64
             },
             "metric": "l2"
         }
@@ -144,7 +144,7 @@ def train_pruned(baseline_model, train_loader, test_loader):
     pruned_model = pruned_model.init_compress(pruning_config, INPUT_SHAPE).to(DEVICE)
     
     # Retrain (fine-tune) the pruned model
-    print("Retraining pruned model (20 epochs)...")
+    print("Retraining pruned model (15 epochs)...")
     criterion_fun = nn.CrossEntropyLoss()
     optimizer_fun = optim.SGD(pruned_model.parameters(), lr=1.e-3, weight_decay=5e-4, momentum=.9)
     lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer_fun, mode="min", patience=1)
@@ -167,7 +167,7 @@ def train_quantized_pruned(pruned_model, train_loader, test_loader):
             "sparsity": {
                 "conv2d_0": 0,
                 "conv2d_1": 9,
-                "linear_0": 50
+                "linear_0": 64
             },
             "metric": "l2"
         }
@@ -204,7 +204,7 @@ def train_quantized_pruned(pruned_model, train_loader, test_loader):
     lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer_fun, mode="min", patience=1)
 
     quantized_model.fit(
-        train_loader, 20, 
+        train_loader, 15, 
         criterion_fun, optimizer_fun, lr_scheduler,
         validation_dataloader=test_loader, 
         metrics={"acc": accuracy_fun},
@@ -243,7 +243,7 @@ if __name__ == "__main__":
     print(f"\n===> Layerwise Prunning Results:")
     for i, (name, module) in enumerate(pruned_model.names_layers()):
         if ("conv2d" in name) or ("linear" in name):
-            print(f"    Layer name : {name}, Original size {baseline_model[i].get_size_in_bits()/8*1024} Reduced size {module.get_size_in_bits()/8*1024}:  Size Ratio: {(1 - module.get_size_in_bits()/baseline_model[i].get_size_in_bits())*100:.2f}%") # type: ignore
+            print(f"    Layer name : {name}, Original size {baseline_model[i].get_size_in_bits()/(8*1024)} Reduced size {module.get_size_in_bits()/(8*1024)}:  Size Ratio: {(1 - module.get_size_in_bits()/baseline_model[i].get_size_in_bits())*100:.2f}%") # type: ignore
 
 
     # --- STAGE 3: QUANTIZED-PRUNED ---
@@ -255,6 +255,11 @@ if __name__ == "__main__":
     print(f"\n==> STAGE 3 (Quantized-Pruned) COMPLETE ==")
     print(f"    Accuracy: {quantized_eval['acc']:.2f}%")
     print(f"    Size:     {quantized_size} bytes ({quantized_size/original_size*100:.2f}% of original)")
+
+    print(f"\n===> Layerwise Pruned and Quantized Results:")
+    for i, (name, module) in enumerate(quantized_model.names_layers()):
+        if ("conv2d" in name) or ("linear" in name):
+            print(f"    Layer name : {name}, Original size {baseline_model[i].get_size_in_bits()/(8*1024):8.4f} Reduced size {module.get_size_in_bits()/(8*1024):8.4f}:  Size Ratio: {(1 - module.get_size_in_bits()/baseline_model[i].get_size_in_bits())*100:.2f}%") # type: ignore
 
     print("\n--- REPRODUCTION FINISHED ---")
     print("\nFinal Results Summary:")
