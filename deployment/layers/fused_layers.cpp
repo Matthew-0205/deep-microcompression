@@ -10,10 +10,8 @@ void LinearReLU::forward(float* input, float* output) {
         // Matrix-vector multiplication
         for (uint32_t i = 0; i < this->input_size; i++) {
             output_temp += input[i] * this->weight[(j * this->input_size) + i];
-            // output_temp += get_value(input, i) * get_value(this->weight, ((j * this->input_size) + i));
         }
         output[j] = relu(output_temp);
-        // set_value(output, j, relu(output_temp));
     }
 }
 
@@ -55,29 +53,12 @@ void Conv2dReLU::forward(float* input, float* output) {
                                                 (c_in * this->kernel_row_size * kernel_col_size) + 
                                                 (j * this->kernel_col_size) + 
                                                 i];
-                                // output_temp += get_value(
-                                //     input,
-                                //     (k * padded_row_size * padded_col_size) +
-                                //     ((j + m * this->stride_row) * padded_col_size) + 
-                                //     (i + l * this->stride_col)
-                                // ) *
-                                // get_value(
-                                //     this->weight, 
-                                //     (n * input_channel_per_group * this->kernel_row_size * this->kernel_col_size) +
-                                //     (c_in * this->kernel_row_size * kernel_col_size) + 
-                                //     (j * this->kernel_col_size) + i
-                                // );
                             }
                         }
                     }
                     output[(n * this->output_row_size * this->output_col_size) + 
                             (m * this->output_col_size) + 
                             l] = relu(output_temp);
-                    // set_value(output, 
-                    //     (n * this->output_row_size * this->output_col_size) + 
-                    //     (m * this->output_col_size) + l,
-                    //     relu(output_temp)
-                    // );
                 }
             }
         }
@@ -92,9 +73,7 @@ void LinearReLU6::forward(float* input, float* output) {
         // Matrix-vector multiplication
         for (uint32_t i = 0; i < this->input_size; i++) {
             output_temp += input[i] * this->weight[(j * this->input_size) + i];
-            // output_temp += get_value(input, i) * get_value(this->weight, ((j * this->input_size) + i));
         }
-        // set_value(output, j, relu6(output_temp));
         output[j] = relu6(output_temp);
     }
 }
@@ -137,29 +116,12 @@ void Conv2dReLU6::forward(float* input, float* output) {
                                                 (c_in * this->kernel_row_size * kernel_col_size) + 
                                                 (j * this->kernel_col_size) + 
                                                 i];
-                                // output_temp += get_value(
-                                //     input,
-                                //     (k * padded_row_size * padded_col_size) +
-                                //     ((j + m * this->stride_row) * padded_col_size) + 
-                                //     (i + l * this->stride_col)
-                                // ) *
-                                // get_value(
-                                //     this->weight, 
-                                //     (n * input_channel_per_group * this->kernel_row_size * this->kernel_col_size) +
-                                //     (c_in * this->kernel_row_size * kernel_col_size) + 
-                                //     (j * this->kernel_col_size) + i
-                                // );
                             }
                         }
                     }
                     output[(n * this->output_row_size * this->output_col_size) + 
                             (m * this->output_col_size) + 
                             l] = relu6(output_temp);
-                    // set_value(output, 
-                    //     (n * this->output_row_size * this->output_col_size) + 
-                    //     (m * this->output_col_size) + l,
-                    //     relu6(output_temp)
-                    // );
                 }
             }
         }
@@ -217,14 +179,6 @@ void Conv2dReLU::forward(float* input, float* output) {
                             for (uint32_t i = 0; i < this->kernel_col_size; i++) {
 
                                 // Convolution operation
-                                // output_temp += 
-                                //     input[(k * padded_row_size * padded_col_size) +
-                                //         ((j + m * this->stride_row) * padded_col_size) + 
-                                //         (i + l * this->stride_col)] *
-                                //     this->weight[(n * input_channel_per_group * this->kernel_row_size * this->kernel_col_size) +
-                                //                 (c_in * this->kernel_row_size * kernel_col_size) + 
-                                //                 (j * this->kernel_col_size) + 
-                                //                 i];
                                 output_temp += input[(k * padded_row_size * padded_col_size) +
                                         ((j + m * this->stride_row) * padded_col_size) + 
                                         (i + l * this->stride_col)] *
@@ -297,14 +251,6 @@ void Conv2dReLU6::forward(float* input, float* output) {
                             for (uint32_t i = 0; i < this->kernel_col_size; i++) {
 
                                 // Convolution operation
-                                // output_temp += 
-                                //     input[(k * padded_row_size * padded_col_size) +
-                                //         ((j + m * this->stride_row) * padded_col_size) + 
-                                //         (i + l * this->stride_col)] *
-                                //     this->weight[(n * input_channel_per_group * this->kernel_row_size * this->kernel_col_size) +
-                                //                 (c_in * this->kernel_row_size * kernel_col_size) + 
-                                //                 (j * this->kernel_col_size) + 
-                                //                 i];
                                 output_temp += input[(k * padded_row_size * padded_col_size) +
                                         ((j + m * this->stride_row) * padded_col_size) + 
                                         (i + l * this->stride_col)] *
@@ -339,18 +285,11 @@ void LinearReLU::forward(int8_t* input, int8_t* output) {
 
     for (uint32_t j = 0; j < this->output_size; j++) {
         output_temp = this->bias ? this->bias[j] : 0;
-        // if (this->bias) {
-        //     output_temp =  this->bias[j];
-        // }
-        // else {
-        //     output_temp =  0;
-        // }
+
         for (uint32_t i = 0; i < this->input_size; i++) {
             output_temp += ((int32_t)get_packed_value(input, i) - this->input_zero_point) *
                     (int32_t)get_packed_value(this->weight, (j * this->input_size) + i);
     
-                // output_temp += ((int32_t)input[i] - this->input_zero_point) * 
-                //              (int32_t)this->weight[(j * this->input_size) + i];
         }
 
         output_temp = relu(output_temp);
@@ -360,9 +299,6 @@ void LinearReLU::forward(int8_t* input, int8_t* output) {
         output_temp += this->output_zero_point;
 
         set_packed_value(output, j, output_temp);
-        // Clamp to int8_t range
-        // output[j] = output_temp < -128 ? (int8_t)-128 : 
-        //            (output_temp > 127 ? (int8_t)127 : (int8_t)output_temp);
     }
 }
 
@@ -389,39 +325,12 @@ void Conv2dReLU::forward(int8_t* input, int8_t* output) {
                 for (uint32_t l = 0; l < this->output_col_size; l++) {
                     
                     // Calculate output index
-                    // output_index = (n * this->output_row_size * this->output_col_size) + 
-                    //             (m * this->output_col_size) + 
-                    //             l;
                     output_temp = this->bias ? this->bias[n] : 0;
-
-                    // if (this->bias) {
-                    //     output_temp = this->bias[n];
-                    // }
-                    // else {
-                    //     output_temp = 0;
-                    // }
 
                     for (uint32_t c_in = 0; c_in < input_channel_per_group; c_in++) {
                         k = g * input_channel_per_group + c_in;
                         for (uint32_t j = 0; j < this->kernel_row_size; j++) {
                             for (uint32_t i = 0; i < this->kernel_col_size; i++) {
-                                // int8_t inp = input[(k * padded_row_size * padded_col_size) +
-                                //                    ((j + m * this->stride_row) * padded_col_size) + 
-                                //                    (i + l * this->stride_col)];
-
-                                // int8_t wei = this->weight[(n * input_channel_per_group * this->kernel_row_size * this->kernel_col_size) +
-                                //                          (c_in * this->kernel_row_size * kernel_col_size) + 
-                                //                          (j * this->kernel_col_size) + 
-                                //                          i];
-                                // // Convolution operation
-                                // output_temp +=  
-                                //     ((int32_t)input[(k * padded_row_size * padded_col_size) +
-                                //                    ((j + m * this->stride_row) * padded_col_size) + 
-                                //                    (i + l * this->stride_col)] - this->input_zero_point) *
-                                //     (int32_t)this->weight[(n * input_channel_per_group * this->kernel_row_size * this->kernel_col_size) +
-                                //                          (c_in * this->kernel_row_size * kernel_col_size) + 
-                                //                          (j * this->kernel_col_size) + 
-                                //                          i];
 
                                 output_temp += ((int32_t)get_packed_value(input, 
                                     (k * padded_row_size * padded_col_size) +
@@ -448,12 +357,6 @@ void Conv2dReLU::forward(int8_t* input, int8_t* output) {
                         l, 
                         output_temp
                     );
-                    // Clamp to int8_t range
-                    // output[(n * this->output_row_size * this->output_col_size) + 
-                    // (m * this->output_col_size) + 
-                    // l] = output_temp < -128 ? (int8_t)-128 : 
-                    //                      (output_temp > 127 ? (int8_t)127 : (int8_t)output_temp);
-
                 }
             }
         }
@@ -471,18 +374,10 @@ void LinearReLU6::forward(int8_t* input, int8_t* output) {
     for (uint32_t j = 0; j < this->output_size; j++) {
         output_temp = this->bias ? this->bias[j] : 0;
 
-        // if (this->bias) {
-        //     output_temp =  this->bias[j];
-        // }
-        // else {
-        //     output_temp =  0;
-        // }
         for (uint32_t i = 0; i < this->input_size; i++) {
             output_temp += ((int32_t)get_packed_value(input, i) - this->input_zero_point) *
                         (int32_t)get_packed_value(this->weight, (j * this->input_size) + i);
     
-                // output_temp += ((int32_t)input[i] - this->input_zero_point) * 
-                //              (int32_t)this->weight[(j * this->input_size) + i];
         }
 
         output_temp = relux(output_temp, six_point);
@@ -491,11 +386,7 @@ void LinearReLU6::forward(int8_t* input, int8_t* output) {
         output_temp = roundf(output_temp * this->bias_scale / this->output_scale);
         output_temp += this->output_zero_point;
         
-        set_packed_value(output, j, output_temp);
-        
-        // Clamp to int8_t range
-        // output[j] = output_temp < -128 ? (int8_t)-128 : 
-        //            (output_temp > 127 ? (int8_t)127 : (int8_t)output_temp);
+        set_packed_value(output, j, output_temp);        
     }
 }
 
@@ -522,30 +413,12 @@ void Conv2dReLU6::forward(int8_t* input, int8_t* output) {
             for (uint32_t m = 0; m < this->output_row_size; m++) {
                 for (uint32_t l = 0; l < this->output_col_size; l++) {
                     
-                    // Calculate output index
-                    // output_index = (n * this->output_row_size * this->output_col_size) + 
-                    //             (m * this->output_col_size) + 
-                    //             l;
-                    // if (this->bias) {
-                    //     output_temp = this->bias[n];
-                    // }
-                    // else {
-                    //     output_temp = 0;
-                    // }
                     output_temp = this->bias ? this->bias[n] : 0;
 
                     for (uint32_t c_in = 0; c_in < input_channel_per_group; c_in++) {
                         k = g * input_channel_per_group + c_in;
                         for (uint32_t j = 0; j < this->kernel_row_size; j++) {
                             for (uint32_t i = 0; i < this->kernel_col_size; i++) {                                // Convolution operation
-                                // output_temp += 
-                                //     ((int32_t)input[(k * padded_row_size * padded_col_size) +
-                                //                    ((j + m * this->stride_row) * padded_col_size) + 
-                                //                    (i + l * this->stride_col)] - this->input_zero_point) *
-                                //     (int32_t)this->weight[(n * input_channel_per_group * this->kernel_row_size * this->kernel_col_size) +
-                                //                          (c_in * this->kernel_row_size * kernel_col_size) + 
-                                //                          (j * this->kernel_col_size) + 
-                                //                          i];  
                                                          
                                 output_temp += ((int32_t)get_packed_value(input, 
                                     (k * padded_row_size * padded_col_size) +
@@ -572,12 +445,6 @@ void Conv2dReLU6::forward(int8_t* input, int8_t* output) {
                         l, 
                         output_temp
                     );
-                    // Clamp to int8_t range
-                    // output[(n * this->output_row_size * this->output_col_size) + 
-                    // (m * this->output_col_size) + 
-                    // l] = output_temp < -128 ? (int8_t)-128 : 
-                    //                      (output_temp > 127 ? (int8_t)127 : (int8_t)output_temp);
-
                 }
             }
         }

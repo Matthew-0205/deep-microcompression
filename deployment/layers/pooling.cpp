@@ -59,17 +59,9 @@ void MaxPool2d::forward(float* input, float* output) {
                 for (uint32_t j = 0; j < this->kernel_size; j++) {
                     for (uint32_t i = 0; i < this->kernel_size; i++) {
                         // Calculate input index
-                        // uint32_t input_idx = (n * this->input_row_size * this->input_col_size) +
-                        //                   ((m * this->stride + j) * this->input_col_size) +
-                        //                   (l * this->stride + i);
                         input_val = input[(n * this->input_row_size * this->input_col_size) +
                                           ((m * this->stride + j) * this->input_col_size) +
                                           (l * this->stride + i)];
-                        // input_val = get_value(input, 
-                        //     (n * this->input_row_size * this->input_col_size) +
-                        //     ((m * this->stride + j) * this->input_col_size) +
-                        //     (l * this->stride + i)
-                        // );
                         // Update max value
                         if (input_val > temp) {
                             temp = input_val;
@@ -80,10 +72,6 @@ void MaxPool2d::forward(float* input, float* output) {
                 // Store max value in output
                 output[(n * this->output_row_size * this->output_col_size) +
                         (m * this->output_col_size) + l] = temp;
-                // set_value(output, 
-                //     (n * this->output_row_size * this->output_col_size) +
-                //     (m * this->output_col_size) + l,
-                //     temp);
             }
         }
     }
@@ -124,27 +112,13 @@ void AvgPool2d::forward(float* input, float* output) {
                 for (uint32_t j = 0; j < this->kernel_size; j++) {
                     for (uint32_t i = 0; i < this->kernel_size; i++) {
                         // Calculate input index
-                        // uint32_t input_idx = (n * this->input_row_size * this->input_col_size) +
-                        //                   ((m * this->stride + j) * this->input_col_size) +
-                        //                   (l * this->stride + i);
                         total += input[(n * this->input_row_size * this->input_col_size) +
                                           ((m * this->stride + j) * this->input_col_size) +
                                           (l * this->stride + i)];
-
-                        // total += get_value(input,
-                        //     (n * this->input_row_size * this->input_col_size) +
-                        //     ((m * this->stride + j) * this->input_col_size) +
-                        //     (l * this->stride + i)
-                        // );
                     }
                 }
                 output[(n * this->output_row_size * this->output_col_size) +
                                      (m * this->output_col_size) + l] = total / pool_size;
-                // set_value(output, 
-                //     (n * this->output_row_size * this->output_col_size) +
-                //     (m * this->output_col_size) + l,
-                //     total / pool_size
-                // );
             }
         }
     }
@@ -184,12 +158,6 @@ void MaxPool2d::forward(int8_t* input, int8_t* output) {
                 for (uint32_t j = 0; j < this->kernel_size; j++) {
                     for (uint32_t i = 0; i < this->kernel_size; i++) {
                         // Calculate input index
-                        // uint32_t input_idx = (n * this->input_row_size * this->input_col_size) +
-                        //                   ((m * this->stride + j) * this->input_col_size) +
-                        //                   (l * this->stride + i);
-                        // input_val = input[(n * this->input_row_size * this->input_col_size) +
-                        //                   ((m * this->stride + j) * this->input_col_size) +
-                        //                   (l * this->stride + i)];
 
                         input_val = get_packed_value(input, 
                             (n * this->input_row_size * this->input_col_size) +
@@ -205,10 +173,6 @@ void MaxPool2d::forward(int8_t* input, int8_t* output) {
                 }
 
                 // Store max value in output
-                // uint32_t output_idx = (n * this->output_row_size * this->output_col_size) +
-                //                      (m * this->output_col_size) + l;
-                // output[(n * this->output_row_size * this->output_col_size) +
-                //         (m * this->output_col_size) + l] = temp;
                 set_packed_value(output, 
                     (n * this->output_row_size * this->output_col_size) +
                     (m * this->output_col_size) + l,
@@ -254,12 +218,6 @@ void AvgPool2d::forward(int8_t* input, int8_t* output) {
                 for (uint32_t j = 0; j < this->kernel_size; j++) {
                     for (uint32_t i = 0; i < this->kernel_size; i++) {
                         // Calculate input index
-                        // uint32_t input_idx = (n * this->input_row_size * this->input_col_size) +
-                        //                   ((m * this->stride + j) * this->input_col_size) +
-                        //                   (l * this->stride + i);
-                        // total += input[(n * this->input_row_size * this->input_col_size) +
-                        //                   ((m * this->stride + j) * this->input_col_size) +
-                        //                   (l * this->stride + i)];
                         total += get_packed_value(input,
                             (n * this->input_row_size * this->input_col_size) +
                             ((m * this->stride + j) * this->input_col_size) +
@@ -270,16 +228,11 @@ void AvgPool2d::forward(int8_t* input, int8_t* output) {
                 }
 
                 // Store max value in output
-                // uint32_t output_idx = (n * this->output_row_size * this->output_col_size) +
-                //                      (m * this->output_col_size) + l;
                 set_packed_value(output, 
                     (n * this->output_row_size * this->output_col_size) +
                     (m * this->output_col_size) + l,
                     (int8_t)((float)total / pool_size)
-                );
-                // output[(n * this->output_row_size * this->output_col_size) +
-                // (m * this->output_col_size) + l] = (float)total / pool_size;
-              
+                );              
             }
         }
     }

@@ -41,10 +41,8 @@ void Linear::forward(float* input, float* output) {
         // Matrix-vector multiplication
         for (uint32_t i = 0; i < this->input_size; i++) {
             output_temp += input[i] * this->weight[(j * this->input_size) + i];
-            // output_temp += get_value(input, i) * get_value(this->weight, ((j * this->input_size) + i));
         }
         output[j] = output_temp;
-        // set_value(output, j, output_temp);
     }
 }
 
@@ -92,10 +90,6 @@ void Linear::forward(float* input, float* output) {
         output[j] = this->bias ? 
                 output_temp * this->weight_scale + this->bias[j] :
                 output_temp * this->weight_scale;
-        // set_value(output, j, 
-        //     this->bias ? 
-        //     output_temp * this->weight_scale + this->bias[j] :
-        //     output_temp * this->weight_scale);
     }
 }
 
@@ -136,18 +130,9 @@ void Linear::forward(int8_t* input, int8_t* output) {
     for (uint32_t j = 0; j < this->output_size; j++) {
 
         output_temp = this->bias ? this->bias[j] : 0;
-        // if (this->bias) {
-        //     output_temp =  this->bias[j];
-        // }
-        // else {
-        //     output_temp =  0;
-        // }
         for (uint32_t i = 0; i < this->input_size; i++) {
             output_temp += ((int32_t)get_packed_value(input, i) - this->input_zero_point) *
                         (int32_t)get_packed_value(this->weight, (j * this->input_size) + i);
-    
-            // output_temp += ((int32_t)input[i] - this->input_zero_point) * 
-            //                 (int32_t)this->weight[(j * this->input_size) + i];
         }
         
         // Requantize to 8-bit
@@ -155,9 +140,6 @@ void Linear::forward(int8_t* input, int8_t* output) {
         output_temp += this->output_zero_point;
         
         set_packed_value(output, j, output_temp);
-        // Clamp to int8_t range
-        // output[j] = output_temp < -128 ? (int8_t)-128 : 
-        //            (output_temp > 127 ? (int8_t)127 : (int8_t)output_temp);
     }
 }
 #endif // QUANTIZATION_GRANULARITY

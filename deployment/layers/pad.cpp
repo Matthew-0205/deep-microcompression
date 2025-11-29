@@ -40,22 +40,6 @@ void pad_input(int8_t* input, int8_t zero_point, Padding_t padding,
             for (int32_t m = padded_row_size-1; m > -1; m--) {
                 for (int32_t l = padded_col_size-1; l > -1; l--) {
 
-                    // if (m < padding.padding_top || m >= padded_row_size - padding.padding_bottom || 
-                    //     l < padding.padding_left || l >= padded_col_size - padding.padding_right){
-                        
-                    //         input[((n * padded_row_size * padded_col_size) + 
-                    //         (m * padded_col_size) + 
-                    //         l)] = zero_point;
-                    //     }
-                    // else {
-                    //         input[((n * padded_row_size * padded_col_size) + 
-                    //         (m * padded_col_size) + 
-                    //         l)] =
-                    //         input[((n * input_row_size * input_col_size) + 
-                    //         ((m-padding.padding_top) * input_col_size) + 
-                    //         (l-padding.padding_left))];
-                    // }
-
                     if (m < padding.padding_top || m >= padded_row_size - padding.padding_bottom || 
                         l < padding.padding_left || l >= padded_col_size - padding.padding_right){
                         
@@ -65,9 +49,6 @@ void pad_input(int8_t* input, int8_t zero_point, Padding_t padding,
                                 l),
                                 zero_point
                             );
-                            // input[((n * padded_row_size * padded_col_size) + 
-                            // (m * padded_col_size) + 
-                            // l)] = zero_point;
                         }
                     else {
                             set_packed_value(input,
@@ -80,12 +61,6 @@ void pad_input(int8_t* input, int8_t zero_point, Padding_t padding,
                                     (l-padding.padding_left))
                                 )
                             );
-                    //         input[((n * padded_row_size * padded_col_size) + 
-                    //         (m * padded_col_size) + 
-                    //         l)] =
-                    //         input[((n * input_row_size * input_col_size) + 
-                    //         ((m-padding.padding_top) * input_col_size) + 
-                    //         (l-padding.padding_left))];
                     }
                 }
             }

@@ -56,20 +56,23 @@ Conv2d::Conv2d(uint32_t input_channel_size, uint32_t input_row_size, uint32_t in
 void Conv2d::forward(float* input, float* output) {
     float output_temp;
 
+    // Handle Grouped Convolution (e.g., Depthwise)
     uint32_t input_channel_per_group = this->input_channel_size / this->groups;
     uint32_t output_channel_per_group = this->output_channel_size / this->groups;
 
-    uint32_t n, k;
+    uint32_t n, k; // Indices for Output/Input channels
 
+    // Padding calculations
     uint32_t padded_row_size = this->input_row_size + this->padding.padding_top + this->padding.padding_bottom;
     uint32_t padded_col_size = this->input_col_size + this->padding.padding_left + this->padding.padding_right;
 
     pad_input(input, this->padding, input_channel_size, input_row_size, input_col_size, padded_row_size, padded_col_size);
 
     for (uint32_t g = 0; g < this->groups; g++){
-        // Output channel loop
+        // Loop Output Channels (Filters)
         for (uint32_t c_out = 0; c_out < output_channel_per_group; c_out++) {
             n = g * output_channel_per_group + c_out;
+
             // Output spatial dimensions loops
             for (uint32_t m = 0; m < this->output_row_size; m++) {
                 for (uint32_t l = 0; l < this->output_col_size; l++) {
@@ -80,7 +83,7 @@ void Conv2d::forward(float* input, float* output) {
                         for (uint32_t j = 0; j < this->kernel_row_size; j++) {
                             for (uint32_t i = 0; i < this->kernel_col_size; i++) {
 
-                                // Convolution operation
+                                // Standard MAC Operation
                                 output_temp += 
                                     input[(k * padded_row_size * padded_col_size) +
                                         ((j + m * this->stride_row) * padded_col_size) + 
@@ -89,29 +92,12 @@ void Conv2d::forward(float* input, float* output) {
                                                 (c_in * this->kernel_row_size * kernel_col_size) + 
                                                 (j * this->kernel_col_size) + 
                                                 i];
-                                // output_temp += get_value(
-                                //     input,
-                                //     (k * padded_row_size * padded_col_size) +
-                                //     ((j + m * this->stride_row) * padded_col_size) + 
-                                //     (i + l * this->stride_col)
-                                // ) *
-                                // get_value(
-                                //     this->weight, 
-                                //     (n * input_channel_per_group * this->kernel_row_size * this->kernel_col_size) +
-                                //     (c_in * this->kernel_row_size * kernel_col_size) + 
-                                //     (j * this->kernel_col_size) + i
-                                // );
                             }
                         }
                     }
                     output[(n * this->output_row_size * this->output_col_size) + 
                             (m * this->output_col_size) + 
                             l] = output_temp;
-                    // set_value(output, 
-                    //     (n * this->output_row_size * this->output_col_size) + 
-                    //     (m * this->output_col_size) + l,
-                    //     output_temp
-                    // );
                 }
             }
         }
@@ -196,19 +182,6 @@ void Conv2d::forward(float* input, float* output) {
                             for (uint32_t i = 0; i < this->kernel_col_size; i++) {
 
                                 // // Convolution operation
-                                // output_temp += 
-                                //     input[(k * padded_row_size * padded_col_size) +
-                                //         ((j + m * this->stride_row) * padded_col_size) + 
-                                //         (i + l * this->stride_col)] *
-                                //     this->weight[(n * input_channel_per_group * this->kernel_row_size * this->kernel_col_size) +
-                                //                 (c_in * this->kernel_row_size * kernel_col_size) + 
-                                //                 (j * this->kernel_col_size) + 
-                                //                 i];
-                                // int8_t weight = get_packed_value(this->weight, 
-                                //     (n * input_channel_per_group * this->kernel_row_size * this->kernel_col_size) +
-                                //     (c_in * this->kernel_row_size * kernel_col_size) + 
-                                //     (j * this->kernel_col_size) + i
-                                // );
                                 output_temp += input[(k * padded_row_size * padded_col_size) +
                                         ((j + m * this->stride_row) * padded_col_size) + 
                                         (i + l * this->stride_col)] *
@@ -225,13 +198,6 @@ void Conv2d::forward(float* input, float* output) {
                         l] = this->bias ? 
                         output_temp * this->weight_scale + this->bias[n]:
                         output_temp * this->weight_scale;  
-                    // set_value(output, 
-                    //     (n * this->output_row_size * this->output_col_size) + 
-                    //     (m * this->output_col_size) + l,
-                    //     this->bias ? 
-                    //     output_temp * this->weight_scale + this->bias[n]:
-                    //     output_temp * this->weight_scale
-                    // );
                 }
             }
         }
@@ -304,33 +270,14 @@ void Conv2d::forward(int8_t* input, int8_t* output) {
             // Output spatial dimensions loops
             for (uint32_t m = 0; m < this->output_row_size; m++) {
                 for (uint32_t l = 0; l < this->output_col_size; l++) {
-                    
-                    // Calculate output index
-                    // output_index = (n * this->output_row_size * this->output_col_size) + 
-                    //             (m * this->output_col_size) + 
-                    //             l;
+
                     output_temp = this->bias ? this->bias[n] : 0;
-                    // if (this->bias) {
-                    //     output_temp = this->bias[n];
-                    // }
-                    // else {
-                    //     output_temp = 0;
-                    // }
 
                     for (uint32_t c_in = 0; c_in < input_channel_per_group; c_in++) {
                         k = g * input_channel_per_group + c_in;
                         for (uint32_t j = 0; j < this->kernel_row_size; j++) {
                             for (uint32_t i = 0; i < this->kernel_col_size; i++) {
                                 // Convolution operation
-                                // output_temp += 
-                                //     ((int32_t)input[(k * padded_row_size * padded_col_size) +
-                                //                    ((j + m * this->stride_row) * padded_col_size) + 
-                                //                    (i + l * this->stride_col)] - this->input_zero_point) *
-                                //     (int32_t)this->weight[(n * input_channel_per_group * this->kernel_row_size * this->kernel_col_size) +
-                                //                          (c_in * this->kernel_row_size * kernel_col_size) + 
-                                //                          (j * this->kernel_col_size) + 
-                                //                          i];
-
                                 int8_t inp = get_packed_value(input, 
                                     (k * padded_row_size * padded_col_size) +
                                     ((j + m * this->stride_row) * padded_col_size) + 
@@ -364,12 +311,6 @@ void Conv2d::forward(int8_t* input, int8_t* output) {
                         l, 
                         output_temp
                     );
-                    // Clamp to int8_t range
-                    // output[(n * this->output_row_size * this->output_col_size) + 
-                    //     (m * this->output_col_size) + 
-                    //     l] = output_temp < -128 ? (int8_t)-128 : 
-                    //             (output_temp > 127 ? (int8_t)127 : (int8_t)output_temp);
-
                 }
             }
         }
