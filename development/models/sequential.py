@@ -265,12 +265,12 @@ class Sequential(nn.Sequential):
                 loss.backward()
                 optimizer_fun.step()
 
-                train_loss += loss.item()*X.size(0)
+                train_loss += loss.item() * X.size(0)
                 train_data_len += X.size(0)
 
                 with torch.inference_mode():
                     for name, metric_func in metrics.items():
-                        metrics_result[name] += metric_func(y_pred.detach(), y_true)
+                        metrics_result[name] += metric_func(y_pred.detach(), y_true) * X.size(0)
 
             train_loss /= train_data_len
             for name in metrics.keys():
@@ -288,7 +288,7 @@ class Sequential(nn.Sequential):
 
                 # Learning rate scheduling
                 if lr_scheduler is not None: 
-                    lr_scheduler.step(epoch)
+                    lr_scheduler.step(validation_loss)
 
             # Logging
                 if verbose:
