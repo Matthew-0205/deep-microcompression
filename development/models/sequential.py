@@ -711,7 +711,7 @@ class Sequential(nn.Sequential):
 
 
 
-    def fuse(self, batchnorm_only: bool = False) -> "Sequential":
+    def fuse(self, batchnorm_only: bool = False, device=None) -> "Sequential":
         """
         Fuses adjacent layers to optimize inference speed and reduce footprint.
 
@@ -780,6 +780,9 @@ class Sequential(nn.Sequential):
         fused_model.add_module(current_name, current_layer)
 
         init_dmc_parameter(self, fused_model)
+        
+        if device:
+            fused_model.to(device=device)
 
         return fused_model
 
