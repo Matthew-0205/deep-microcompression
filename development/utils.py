@@ -446,7 +446,13 @@ def int2_to_bytes(data: list) -> list:
         byte = ((byte << 2) | (val & 0x03))
     return list(struct.pack("<b", byte))
 
-def pack_int_to_byte(byte_list, bitwidth):
+def pack_into_byte(byte_list, bitwidth):
+    """Packs a list of bytes into a single byte
+
+    Args:
+        byte_list: List of containing data to be packed
+        bitwidth: the bitwidth which the data are, i.e. 8, 4, 2
+    """
     assert len(byte_list) <= 8 // bitwidth, f"byte list of lenght {len(byte_list)} cannot be pack into 8 bit withs bitwidth {bitwidth}"
     shift = bitwidth
     mask = (1 << bitwidth) - 1
@@ -502,7 +508,7 @@ def convert_tensor_to_bytes_var(tensor: torch.Tensor,
                     index = (i*data_per_byte)+pos
                     if index < len(line):
                         data.append(line[index])
-                bytes.append(pack_int_to_byte(data, bitwidth))
+                bytes.append(pack_into_byte(data, bitwidth))
 
             var_def_str += "    " + ", ".join(
                 [f"0x{b:02X}" for val in bytes for b in val]
