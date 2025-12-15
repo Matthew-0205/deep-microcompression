@@ -37,12 +37,12 @@ Linear::Linear(uint32_t output_size, uint32_t input_size,
 void Linear::forward(float* input, float* output) {
     float output_temp;
     for (uint32_t j = 0; j < this->output_size; j++) {
-        output_temp = this->bias ? this->bias[j] : 0;
+        output_temp = this->bias ? par_read_float(this->bias, j) : 0;
         // Matrix-vector multiplication
         for (uint32_t i = 0; i < this->input_size; i++) {
-            output_temp += input[i] * this->weight[(j * this->input_size) + i];
+            output_temp += act_read_float(input, i) * par_read_float(this->weight, (j * this->input_size) + i);
         }
-        output[j] = output_temp;
+        act_write_float(output, j, output_temp);
     }
 }
 
@@ -84,12 +84,14 @@ void Linear::forward(float* input, float* output) {
         // output[j] = 0;
         output_temp = 0;
         for (uint32_t i = 0; i < this->input_size; i++) {
-            // output_temp += input[i] * this->weight[(j * this->input_size) + i];
-            output_temp += input[i] * get_packed_value(this->weight, (j * this->input_size) + i);
+            output_temp += act_read_float(input, i) * par_read_packed_intb(this->weight, (j * this->input_size) + i);
         }
-        output[j] = this->bias ? 
-                output_temp * this->weight_scale + this->bias[j] :
-                output_temp * this->weight_scale;
+        act_write_float(output,
+            j,
+            (this->bias ? 
+            (output_temp * this->weight_scale + par_read_float(this->bias, j)) :
+            (output_temp * this->weight_scale))
+        );
     }
 }
 
@@ -128,18 +130,19 @@ void Linear::forward(int8_t* input, int8_t* output) {
     int32_t output_temp;
 
     for (uint32_t j = 0; j < this->output_size; j++) {
+        output_temp = this->bias ? par_read_int32(this->bias, j) : 0;
 
-        output_temp = this->bias ? this->bias[j] : 0;
         for (uint32_t i = 0; i < this->input_size; i++) {
-            output_temp += ((int32_t)get_packed_value(input, i) - this->input_zero_point) *
-                        (int32_t)get_packed_value(this->weight, (j * this->input_size) + i);
+            output_temp += ((int32_t)act_read_packed_intb(input, i) - this->input_zero_point) *
+                            par_read_packed_intb(this->weight, (j * this->input_size) + i);
         }
         
         // Requantize to 8-bit
         output_temp = roundf(output_temp * this->bias_scale / this->output_scale);
         output_temp += this->output_zero_point;
+        output_temp = clampb(output_temp);
         
-        set_packed_value(output, j, output_temp);
+        act_write_packed_intb(output, j, output_temp);
     }
 }
 #endif // QUANTIZATION_GRANULARITY

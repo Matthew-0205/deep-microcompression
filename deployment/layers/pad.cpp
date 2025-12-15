@@ -12,17 +12,24 @@ void pad_input(float* input, Padding_t padding,
                     if (m < padding.padding_top || m >= padded_row_size - padding.padding_bottom || 
                         l < padding.padding_left || l >= padded_col_size - padding.padding_right){
                         
-                            input[((n * padded_row_size * padded_col_size) + 
-                            (m * padded_col_size) + 
-                            l)] = 0;
+                            act_write_float(input, 
+                                ((n * padded_row_size * padded_col_size) + 
+                                (m * padded_col_size) + 
+                                l),
+                                0
+                            );
                         }
                     else {
-                            input[((n * padded_row_size * padded_col_size) + 
+                        act_write_float(input, 
+                            ((n * padded_row_size * padded_col_size) + 
                             (m * padded_col_size) + 
-                            l)] =
-                            input[((n * input_row_size * input_col_size) + 
-                            ((m-padding.padding_top) * input_col_size) + 
-                            (l-padding.padding_left))];
+                            l),
+                            act_read_float(input, 
+                                ((n * input_row_size * input_col_size) + 
+                                ((m-padding.padding_top) * input_col_size) + 
+                                (l-padding.padding_left))
+                            )
+                        );
                     }
                 }
             }
@@ -43,7 +50,7 @@ void pad_input(int8_t* input, int8_t zero_point, Padding_t padding,
                     if (m < padding.padding_top || m >= padded_row_size - padding.padding_bottom || 
                         l < padding.padding_left || l >= padded_col_size - padding.padding_right){
                         
-                            set_packed_value(input, 
+                            act_write_packed_intb(input, 
                                 ((n * padded_row_size * padded_col_size) + 
                                 (m * padded_col_size) + 
                                 l),
@@ -51,11 +58,11 @@ void pad_input(int8_t* input, int8_t zero_point, Padding_t padding,
                             );
                         }
                     else {
-                            set_packed_value(input,
+                            act_write_packed_intb(input,
                                 ((n * padded_row_size * padded_col_size) + 
                                 (m * padded_col_size) + 
                                 l),
-                                get_packed_value(input,
+                                act_read_packed_intb(input,
                                     ((n * input_row_size * input_col_size) + 
                                     ((m-padding.padding_top) * input_col_size) + 
                                     (l-padding.padding_left))

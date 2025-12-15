@@ -59,9 +59,10 @@ void MaxPool2d::forward(float* input, float* output) {
                 for (uint32_t j = 0; j < this->kernel_size; j++) {
                     for (uint32_t i = 0; i < this->kernel_size; i++) {
                         // Calculate input index
-                        input_val = input[(n * this->input_row_size * this->input_col_size) +
-                                          ((m * this->stride + j) * this->input_col_size) +
-                                          (l * this->stride + i)];
+                        input_val = act_read_float(input, 
+                            (n * this->input_row_size * this->input_col_size) +
+                            ((m * this->stride + j) * this->input_col_size) +
+                            (l * this->stride + i));
                         // Update max value
                         if (input_val > temp) {
                             temp = input_val;
@@ -70,8 +71,11 @@ void MaxPool2d::forward(float* input, float* output) {
                 }
 
                 // Store max value in output
-                output[(n * this->output_row_size * this->output_col_size) +
-                        (m * this->output_col_size) + l] = temp;
+                act_write_float(output, 
+                    (n * this->output_row_size * this->output_col_size) +
+                    (m * this->output_col_size) + l,
+                    temp
+                    );
             }
         }
     }
@@ -112,13 +116,18 @@ void AvgPool2d::forward(float* input, float* output) {
                 for (uint32_t j = 0; j < this->kernel_size; j++) {
                     for (uint32_t i = 0; i < this->kernel_size; i++) {
                         // Calculate input index
-                        total += input[(n * this->input_row_size * this->input_col_size) +
-                                          ((m * this->stride + j) * this->input_col_size) +
-                                          (l * this->stride + i)];
+                        total += act_read_float(input, 
+                            (n * this->input_row_size * this->input_col_size) +
+                            ((m * this->stride + j) * this->input_col_size) +
+                            (l * this->stride + i)
+                        );
                     }
                 }
-                output[(n * this->output_row_size * this->output_col_size) +
-                                     (m * this->output_col_size) + l] = total / pool_size;
+                act_write_float(output,
+                    (n * this->output_row_size * this->output_col_size) +
+                    (m * this->output_col_size) + l,
+                    total / pool_size
+                );
             }
         }
     }
@@ -159,7 +168,8 @@ void MaxPool2d::forward(int8_t* input, int8_t* output) {
                     for (uint32_t i = 0; i < this->kernel_size; i++) {
                         // Calculate input index
 
-                        input_val = get_packed_value(input, 
+                        input_val = act_read_packed_intb(
+                            input,
                             (n * this->input_row_size * this->input_col_size) +
                             ((m * this->stride + j) * this->input_col_size) +
                             (l * this->stride + i)
@@ -173,7 +183,8 @@ void MaxPool2d::forward(int8_t* input, int8_t* output) {
                 }
 
                 // Store max value in output
-                set_packed_value(output, 
+                act_write_packed_intb(
+                    output, 
                     (n * this->output_row_size * this->output_col_size) +
                     (m * this->output_col_size) + l,
                     temp
@@ -217,22 +228,22 @@ void AvgPool2d::forward(int8_t* input, int8_t* output) {
                 // Iterate through pooling window
                 for (uint32_t j = 0; j < this->kernel_size; j++) {
                     for (uint32_t i = 0; i < this->kernel_size; i++) {
-                        // Calculate input index
-                        total += get_packed_value(input,
+                        total += act_read_packed_intb(
+                            input, 
                             (n * this->input_row_size * this->input_col_size) +
                             ((m * this->stride + j) * this->input_col_size) +
                             (l * this->stride + i)
                         );
-
                     }
                 }
 
-                // Store max value in output
-                set_packed_value(output, 
+                // Store average value in output
+                act_write_packed_intb(
+                    output, 
                     (n * this->output_row_size * this->output_col_size) +
                     (m * this->output_col_size) + l,
                     (int8_t)((float)total / pool_size)
-                );              
+                );
             }
         }
     }
