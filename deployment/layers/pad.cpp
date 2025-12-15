@@ -2,8 +2,8 @@
 #include "layer.h"
 
 void pad_input(float* input, Padding_t padding, 
-                const uint32_t input_channel_size, const uint32_t input_row_size, const uint32_t input_col_size, 
-                const uint32_t padded_row_size, const uint32_t padded_col_size) {
+                const uint16_t input_channel_size, const uint16_t input_row_size, const uint16_t input_col_size, 
+                const uint16_t padded_row_size, const uint16_t padded_col_size) {
     if (padding.is_padded()) {
         for (int32_t n = input_channel_size-1; n > -1; n--) {
             for (int32_t m = padded_row_size-1; m > -1; m--) {
@@ -40,8 +40,8 @@ void pad_input(float* input, Padding_t padding,
 
 
 void pad_input(int8_t* input, int8_t zero_point, Padding_t padding, 
-                const uint32_t input_channel_size, const uint32_t input_row_size, const uint32_t input_col_size, 
-                const uint32_t padded_row_size, const uint32_t padded_col_size) {
+                const uint16_t input_channel_size, const uint16_t input_row_size, const uint16_t input_col_size, 
+                const uint16_t padded_row_size, const uint16_t padded_col_size) {
     if (padding.is_padded()) {
         for (int32_t n = input_channel_size-1; n > -1; n--) {
             for (int32_t m = padded_row_size-1; m > -1; m--) {

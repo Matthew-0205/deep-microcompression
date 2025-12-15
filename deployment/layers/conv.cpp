@@ -22,9 +22,9 @@
 #if !defined(QUANTIZATION_SCHEME) || QUANTIZATION_SCHEME == NONE
 
 
-Conv2d::Conv2d(uint32_t input_channel_size, uint32_t input_row_size, uint32_t input_col_size,
-               uint32_t output_channel_size, uint32_t kernel_row_size, uint32_t kernel_col_size,
-               uint32_t stride_row, uint32_t stride_col, Padding_t padding, uint32_t groups,
+Conv2d::Conv2d(uint16_t input_channel_size, uint16_t input_row_size, uint16_t input_col_size,
+               uint16_t output_channel_size, uint8_t kernel_row_size, uint8_t kernel_col_size,
+               uint8_t stride_row, uint8_t stride_col, Padding_t padding, uint8_t groups,
                const float* weight, const float* bias) {
     
     // Store layer parameters
@@ -57,31 +57,31 @@ void Conv2d::forward(float* input, float* output) {
     float output_temp;
 
     // Handle Grouped Convolution (e.g., Depthwise)
-    uint32_t input_channel_per_group = this->input_channel_size / this->groups;
-    uint32_t output_channel_per_group = this->output_channel_size / this->groups;
+    uint16_t input_channel_per_group = this->input_channel_size / this->groups;
+    uint16_t output_channel_per_group = this->output_channel_size / this->groups;
 
-    uint32_t n, k; // Indices for Output/Input channels
+    uint16_t n, k; // Indices for Output/Input channels
 
     // Padding calculations
-    uint32_t padded_row_size = this->input_row_size + this->padding.padding_top + this->padding.padding_bottom;
-    uint32_t padded_col_size = this->input_col_size + this->padding.padding_left + this->padding.padding_right;
+    uint16_t padded_row_size = this->input_row_size + this->padding.padding_top + this->padding.padding_bottom;
+    uint16_t padded_col_size = this->input_col_size + this->padding.padding_left + this->padding.padding_right;
 
     pad_input(input, this->padding, input_channel_size, input_row_size, input_col_size, padded_row_size, padded_col_size);
 
-    for (uint32_t g = 0; g < this->groups; g++){
+    for (uint8_t g = 0; g < this->groups; g++){
         // Loop Output Channels (Filters)
-        for (uint32_t c_out = 0; c_out < output_channel_per_group; c_out++) {
+        for (uint16_t c_out = 0; c_out < output_channel_per_group; c_out++) {
             n = g * output_channel_per_group + c_out;
 
             // Output spatial dimensions loops
-            for (uint32_t m = 0; m < this->output_row_size; m++) {
-                for (uint32_t l = 0; l < this->output_col_size; l++) {
+            for (uint16_t m = 0; m < this->output_row_size; m++) {
+                for (uint16_t l = 0; l < this->output_col_size; l++) {
                     output_temp = this->bias ? par_read_float(this->bias, n) : 0;
 
-                    for (uint32_t c_in = 0; c_in < input_channel_per_group; c_in++) {
+                    for (uint16_t c_in = 0; c_in < input_channel_per_group; c_in++) {
                         k = g * input_channel_per_group + c_in;
-                        for (uint32_t j = 0; j < this->kernel_row_size; j++) {
-                            for (uint32_t i = 0; i < this->kernel_col_size; i++) {
+                        for (uint8_t j = 0; j < this->kernel_row_size; j++) {
+                            for (uint8_t i = 0; i < this->kernel_col_size; i++) {
 
                                 // Standard MAC Operation
                                 output_temp += act_read_float(
@@ -122,9 +122,9 @@ void Conv2d::forward(float* input, float* output) {
  * @brief Constructor for dynamically quantized Conv2d layer
  * @param weight_scale Scale factor for quantized weights
  */
-Conv2d::Conv2d(uint32_t input_channel_size, uint32_t input_row_size, uint32_t input_col_size,
-               uint32_t output_channel_size, uint32_t kernel_row_size, uint32_t kernel_col_size,
-               uint32_t stride_row, uint32_t stride_col, Padding_t padding, uint32_t groups,
+Conv2d::Conv2d(uint16_t input_channel_size, uint16_t input_row_size, uint16_t input_col_size,
+               uint16_t output_channel_size, uint8_t kernel_row_size, uint8_t kernel_col_size,
+               uint8_t stride_row, uint8_t stride_col, Padding_t padding, uint8_t groups,
                const int8_t* weight, const float* bias, float weight_scale) {
 
     // Store layer parameters
@@ -164,29 +164,29 @@ void Conv2d::forward(float* input, float* output) {
     // uint32_t output_index;
     float output_temp;
 
-    uint32_t input_channel_per_group = this->input_channel_size / this->groups;
-    uint32_t output_channel_per_group = this->output_channel_size / this->groups;
+    uint16_t input_channel_per_group = this->input_channel_size / this->groups;
+    uint16_t output_channel_per_group = this->output_channel_size / this->groups;
 
-    uint32_t n, k;
+    uint16_t n, k;
 
-    uint32_t padded_row_size = this->input_row_size + this->padding.padding_top + this->padding.padding_bottom;
-    uint32_t padded_col_size = this->input_col_size + this->padding.padding_left + this->padding.padding_right;
+    uint16_t padded_row_size = this->input_row_size + this->padding.padding_top + this->padding.padding_bottom;
+    uint16_t padded_col_size = this->input_col_size + this->padding.padding_left + this->padding.padding_right;
 
     pad_input(input, this->padding, input_channel_size, input_row_size, input_col_size, padded_row_size, padded_col_size);
 
-    for (uint32_t g = 0; g < this->groups; g++){
+    for (uint8_t g = 0; g < this->groups; g++){
         // Output channel loop
-        for (uint32_t c_out = 0; c_out < output_channel_per_group; c_out++) {
+        for (uint16_t c_out = 0; c_out < output_channel_per_group; c_out++) {
             n = g * output_channel_per_group + c_out;
             // Output spatial dimensions loops
-            for (uint32_t m = 0; m < this->output_row_size; m++) {
-                for (uint32_t l = 0; l < this->output_col_size; l++) {
+            for (uint16_t m = 0; m < this->output_row_size; m++) {
+                for (uint16_t l = 0; l < this->output_col_size; l++) {
                     
                     output_temp = 0;
-                    for (uint32_t c_in = 0; c_in < input_channel_per_group; c_in++) {
+                    for (uint16_t c_in = 0; c_in < input_channel_per_group; c_in++) {
                         k = g * input_channel_per_group + c_in;
-                        for (uint32_t j = 0; j < this->kernel_row_size; j++) {
-                            for (uint32_t i = 0; i < this->kernel_col_size; i++) {
+                        for (uint8_t j = 0; j < this->kernel_row_size; j++) {
+                            for (uint8_t i = 0; i < this->kernel_col_size; i++) {
 
                                 // // Convolution operation
                                 output_temp += act_read_float(
@@ -225,9 +225,9 @@ void Conv2d::forward(float* input, float* output) {
 
 #if QUANTIZATION_GRANULARITY == PER_TENSOR
 
-Conv2d::Conv2d(uint32_t input_channel_size, uint32_t input_row_size, uint32_t input_col_size,
-               uint32_t output_channel_size, uint32_t kernel_row_size, uint32_t kernel_col_size,
-               uint32_t stride_row, uint32_t stride_col, Padding_t padding, uint32_t groups,
+Conv2d::Conv2d(uint16_t input_channel_size, uint16_t input_row_size, uint16_t input_col_size,
+               uint16_t output_channel_size, uint8_t kernel_row_size, uint8_t kernel_col_size,
+               uint8_t stride_row, uint8_t stride_col, Padding_t padding, uint8_t groups,
                const int8_t* weight, const int32_t* bias, float output_scale, 
                int8_t output_zero_point, int8_t input_zero_point,  float bias_scale) {
                 
@@ -264,33 +264,32 @@ Conv2d::Conv2d(uint32_t input_channel_size, uint32_t input_row_size, uint32_t in
  * @param output Output tensor (int8_t)
  */
 void Conv2d::forward(int8_t* input, int8_t* output) {
-    int output_index;
 
-    uint32_t input_channel_per_group = this->input_channel_size / this->groups;
-    uint32_t output_channel_per_group = this->output_channel_size / this->groups;
+    uint16_t input_channel_per_group = this->input_channel_size / this->groups;
+    uint16_t output_channel_per_group = this->output_channel_size / this->groups;
 
     int32_t output_temp;
-    uint32_t n, k;
+    uint16_t n, k;
 
-    uint32_t padded_row_size = this->input_row_size + this->padding.padding_top + this->padding.padding_bottom;
-    uint32_t padded_col_size = this->input_col_size + this->padding.padding_left + this->padding.padding_right;
+    uint16_t padded_row_size = this->input_row_size + this->padding.padding_top + this->padding.padding_bottom;
+    uint16_t padded_col_size = this->input_col_size + this->padding.padding_left + this->padding.padding_right;
 
     pad_input(input, this->input_zero_point, this->padding, input_channel_size, input_row_size, input_col_size, padded_row_size, padded_col_size);
 
-    for (uint32_t g = 0; g < this->groups; g++){
+    for (uint8_t g = 0; g < this->groups; g++){
         // Output channel loop
-        for (uint32_t c_out = 0; c_out < output_channel_per_group; c_out++) {
+        for (uint16_t c_out = 0; c_out < output_channel_per_group; c_out++) {
             n = g * output_channel_per_group + c_out;
             // Output spatial dimensions loops
-            for (uint32_t m = 0; m < this->output_row_size; m++) {
-                for (uint32_t l = 0; l < this->output_col_size; l++) {
+            for (uint16_t m = 0; m < this->output_row_size; m++) {
+                for (uint16_t l = 0; l < this->output_col_size; l++) {
 
                     output_temp = this->bias ? par_read_int32(this->bias, n) : 0;
 
-                    for (uint32_t c_in = 0; c_in < input_channel_per_group; c_in++) {
+                    for (uint16_t c_in = 0; c_in < input_channel_per_group; c_in++) {
                         k = g * input_channel_per_group + c_in;
-                        for (uint32_t j = 0; j < this->kernel_row_size; j++) {
-                            for (uint32_t i = 0; i < this->kernel_col_size; i++) {
+                        for (uint8_t j = 0; j < this->kernel_row_size; j++) {
+                            for (uint8_t i = 0; i < this->kernel_col_size; i++) {
                                 // Convolution operation
 
                                 output_temp += ((int32_t)act_read_packed_intb(

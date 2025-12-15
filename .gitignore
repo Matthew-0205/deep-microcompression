@@ -144,3 +144,6 @@ local_settings.py
 # Any venv-style directory
 *venv*/
 *env*/
+
+Datasets/
+examples/

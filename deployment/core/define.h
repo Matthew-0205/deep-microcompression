@@ -9,8 +9,11 @@
  * 2. Bit-Unpacking Macros for 4-bit and 2-bit weights.
  * 3. Sign Extension Logic.
  */
-#include <stdint.h>
+#ifndef DMC_DEFINE_H
+#define DMC_DEINE_H
 
+#include <stdint.h>
+#include <Arduino.h>
 
 // Configuration Constants (Must match Python utils.py)
 #define NONE 0
@@ -19,6 +22,16 @@
 
 #define PER_TENSOR 1
 #define PER_CHANNEL 2
+
+#define board_specific_pgm_read_byte(address) pgm_read_byte(address)
+#define board_specific_pgm_read_word(address) pgm_read_word(address)
+#define board_specific_pgm_read_dword(address) pgm_read_dword(address)
+#define board_specific_pgm_read_float(address) pgm_read_float(address)
+
+#define act_write_float(array, index, value) ((array)[index] = (value))
+#define act_read_float(array, index) ((array)[index])
+#define par_read_float(array, index) (board_specific_pgm_read_float((array) + (index)))
+#define par_read_int32(array, index) ((int32_t)board_specific_pgm_read_dword((array) + (index)))
 
 
 // Activation Functions (Integer Optimized)
@@ -53,17 +66,24 @@ inline int32_t relu6(int32_t val) { return relux(val, 6);}
  * - Defaults to 8-bit (Standard) if undefined.
  */
 #if !defined(QUANTIZATION_BITWIDTH) || QUANTIZATION_BITWIDTH == 8
+    #define clampb(x) (((x) < -128) ? -128 : ((x) > 127) ? 127 : (x))
+
     // Standard 8-bit access (No packing)
-    #define get_packed_value(packed_array, index) (packed_array[index])
-    #define set_packed_value(packed_array, index, expression) (packed_array[index] = expression)
+    #define par_read_packed_intb(packed_array, index) ((int8_t)board_specific_pgm_read_byte((packed_array) + (index)))
+    #define act_read_packed_intb(packed_array, index) ((int8_t)(packed_array)[(index)])
+    #define act_write_packed_intb(packed_array, index, expression) ((packed_array)[(index)] = (expression))
+
+    // #define get_packed_value(packed_array, index) (packed_array[index])
+    // #define set_packed_value(packed_array, index, expression) (packed_array[index] = expression)
 #elif QUANTIZATION_BITWIDTH == 4
     // 4-Bit Unpacking (2 weights per byte)
 
+    #define clampb(x) (((x) < -8) ? -8 : ((x) > 7) ? 7 : (x))
     // x / 2 is replaced by x >> 1
     #define shifting_divisor 1
     // Mask for 4 bits (0x0F)
     #define MASK 0b00001111   // (1 << bitwidth - 1)
-    #define position_in_byte(index) (((index) & 0b1) << 2)
+    #define position_in_byte(index) ((uint8_t)((index) & 0b1) << 2)
     // #define byte(index) (index) >> shifting_divisor
 
     /*
@@ -72,8 +92,26 @@ inline int32_t relu6(int32_t val) { return relux(val, 6);}
      * 2. Mask relevant bits: & (MASK << shift)
      * 3. Shift to LSB: >> shift
      */
-    #define get_unsigned_packed_value(packed_array, index) \
-        ((packed_array[(index) >> shifting_divisor] & (MASK << position_in_byte(index))) >> position_in_byte(index))
+    // #define get_unsigned_packed_value(packed_array, index) 
+    //     ((packed_array[(index) >> shifting_divisor] & (MASK << position_in_byte(index))) >> position_in_byte(index))
+
+    #define par_read_unsigned_packed_intb(packed_array, index) \
+        ((board_specific_pgm_read_byte((packed_array) + ((index) >> shifting_divisor)) & (MASK << position_in_byte(index))) >> position_in_byte(index))
+
+    #define par_read_signed_packed_intb(packed_array, index) \
+            ((int8_t)(par_read_unsigned_packed_intb(packed_array, index) << 4) >> 4)
+
+    #define par_read_packed_intb(packed_array, index) par_read_signed_packed_intb(packed_array, index)
+
+    #define act_read_unsigned_packed_intb(packed_array, index) \
+        (((packed_array)[(index) >> shifting_divisor]) & (MASK << position_in_byte(index))) >> position_in_byte(index)
+
+    #define act_read_signed_packed_intb(packed_array, index) \
+            ((int8_t)(act_read_unsigned_packed_intb(packed_array, index) << 4) >> 4)
+
+    #define act_read_packed_intb(packed_array, index) act_read_signed_packed_intb(packed_array, index)
+
+    #define act_write_packed_intb(packed_array, index, expression) (packed_array)[(index) >> shifting_divisor] = ((packed_array)[(index) >> shifting_divisor] & ~(MASK << position_in_byte(index))) | ((expression & MASK) << position_in_byte(index)); 
 
     /*
      * Sign Extension
@@ -81,20 +119,21 @@ inline int32_t relu6(int32_t val) { return relux(val, 6);}
      * 1. Shift Left to move sign bit to MSB (<< 4).
      * 2. Arithmetic Shift Right to propagate sign (>> 4).
      */
-    #define get_signed_packed_value(packed_array, index) \
-        ((int8_t)(get_unsigned_packed_value(packed_array, index) << 4) >> 4)
+    // #define get_signed_packed_value(packed_array, index) 
+    //     ((int8_t)(get_unsigned_packed_value(packed_array, index) << 4) >> 4)
 
     // Default getter relies on signed unpacking for weights
-    #define get_packed_value(packed_array, index) get_signed_packed_value(packed_array, index)
+    // #define get_packed_value(packed_array, index) get_signed_packed_value(packed_array, index)
     // #define get_packed_value(packed_array, index) ((packed_array[(index) >> shifting_divisor] >> position_in_byte(index)) & MASK)
     
     // Setter
-    #define set_packed_value(packed_array, index, expression) packed_array[(index) >> shifting_divisor] = (packed_array[(index) >> shifting_divisor] & ~(MASK << position_in_byte(index))) | ((expression & MASK) << position_in_byte(index)); 
+    // #define set_packed_value(packed_array, index, expression) packed_array[(index) >> shifting_divisor] = (packed_array[(index) >> shifting_divisor] & ~(MASK << position_in_byte(index))) | ((expression & MASK) << position_in_byte(index)); 
     // #define set_packed_value(packed_array, index, expression) packed_array[(index) >> shifting_divisor] = ((packed_array[(index) >> shifting_divisor] | (expression & MASK) << position_in_byte(index)) & (expression | ~MASK) << position_in_byte(index)))
     // #define set_packed_value(packed_array, index, expression) packed_array[(index) >> shifting_divisor] = ((packed_array[(index) >> shifting_divisor] << position_in_byte(index)) | (expression & MASK))
 
     #elif QUANTIZATION_BITWIDTH == 2
     // 2-Bit Unpacking (4 weights per byte)
+    #define clampb(x) (((x) < -2) ? -2 : ((x) > 1) ? 1 : (x))
 
     // x / 4 is replaced by x >> 2
     #define shifting_divisor 2 
@@ -103,18 +142,38 @@ inline int32_t relu6(int32_t val) { return relux(val, 6);}
     #define MASK 0b00000011   // (1 << bitwidth - 1)
 
     // Calculates shift amount: (index % 4) * 2 becomes ((index & 3) << 1)
-    #define position_in_byte(index) (((index) & 0b11) << 1)
+    #define position_in_byte(index) ((uint8_t)((index) & 0b11) << 1)
 
-    #define get_unsigned_packed_value(packed_array, index) ((packed_array[(index) >> shifting_divisor] & (MASK << position_in_byte(index))) >> position_in_byte(index))
+    // #define get_unsigned_packed_value(packed_array, index) ((packed_array[(index) >> shifting_divisor] & (MASK << position_in_byte(index))) >> position_in_byte(index))
+
+    #define par_read_unsigned_packed_intb(packed_array, index) \
+        ((board_specific_pgm_read_byte((packed_array) + ((index) >> shifting_divisor)) & (MASK << position_in_byte(index))) >> position_in_byte(index))
+
+    #define par_read_signed_packed_intb(packed_array, index) \
+            ((int8_t)(par_read_unsigned_packed_intb(packed_array, index) << 6) >> 6)
+    #define par_read_packed_intb(packed_array, index) par_read_signed_packed_intb(packed_array, index)
+
+
+    #define act_read_unsigned_packed_intb(packed_array, index) \
+        (((packed_array)[(index) >> shifting_divisor]) & (MASK << position_in_byte(index))) >> position_in_byte(index)
+
+    #define act_read_signed_packed_intb(packed_array, index) \
+            ((int8_t)(act_read_unsigned_packed_intb(packed_array, index) << 6) >> 6)
+
+    #define act_read_packed_intb(packed_array, index) act_read_signed_packed_intb(packed_array, index)
+
+    #define act_write_packed_intb(packed_array, index, expression) (packed_array)[(index) >> shifting_divisor] = ((packed_array)[(index) >> shifting_divisor] & ~(MASK << position_in_byte(index))) | ((expression & MASK) << position_in_byte(index)); 
 
     /*
      * Appendix Algorithm 4: Sign Extension for 2-bit
      * 1. Shift Left by (8 - 2) = 6
      * 2. Arithmetic Shift Right by 6
      */
-    #define get_signed_packed_value(packed_array, index) ((int8_t)(get_unsigned_packed_value(packed_array, index) << 6) >> 6)
-    #define get_packed_value(packed_array, index) get_signed_packed_value(packed_array, index)
+    // #define get_signed_packed_value(packed_array, index) ((int8_t)(get_unsigned_packed_value(packed_array, index) << 6) >> 6)
+    // #define get_packed_value(packed_array, index) get_signed_packed_value(packed_array, index)
 
-    #define set_packed_value(packed_array, index, expression) packed_array[(index) >> shifting_divisor] = (packed_array[(index) >> shifting_divisor] & ~(MASK << position_in_byte(index))) | ((expression & MASK) << position_in_byte(index)); 
+    // #define set_packed_value(packed_array, index, expression) packed_array[(index) >> shifting_divisor] = (packed_array[(index) >> shifting_divisor] & ~(MASK << position_in_byte(index))) | ((expression & MASK) << position_in_byte(index)); 
 
-#endif
+#endif //QUANTIZATION_BITWIDTH
+
+#endif //DMC_DEINE_H
