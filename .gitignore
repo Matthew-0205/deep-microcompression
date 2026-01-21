@@ -1,2 +1,29 @@
 *__pycache__
 *.pyc
+
+# Ignore Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# Ignore virtual environment directories
+venv/
+env/
+.venv/
+*/venv/
+
+# Ignore vscode settings
+.vscode/
+
+# Ignore dataset files
+Datasets/
+
+
+tests
+# experiments/*
+
+build
+
+deep_microcompression/
+
+
+# lib/*
+# lib/
