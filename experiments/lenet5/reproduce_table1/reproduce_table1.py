@@ -34,7 +34,7 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"Using device: {DEVICE}")
 
 LUCKY_NUMBER = 25
-BASELINE_MODEL_FILE = "lenet5_state_dict_old.pth"
+BASELINE_MODEL_FILE = "lenet5_state_dict.pth"
 INPUT_SHAPE = (1, 28, 28)
 
 # Set random seed for reproducibility
@@ -57,8 +57,8 @@ def get_data_loaders():
         transforms.ToTensor(),
     ])
     
-    mnist_train_dataset = datasets.MNIST("../../../Datasets/", train=True, download=True, transform=data_transform)
-    mnist_test_dataset = datasets.MNIST("../../../Datasets/", train=False, download=True, transform=data_transform)
+    mnist_train_dataset = datasets.MNIST("../../../../Datasets/", train=True, download=True, transform=data_transform)
+    mnist_test_dataset = datasets.MNIST("../../../../Datasets/", train=False, download=True, transform=data_transform)
     
     mnist_train_loader = data.DataLoader(mnist_train_dataset, batch_size=32, shuffle=True, num_workers=os.cpu_count(), drop_last=False) # type: ignore
     mnist_test_loader = data.DataLoader(mnist_test_dataset, batch_size=32, shuffle=False, num_workers=os.cpu_count(), drop_last=False) # type: ignore
