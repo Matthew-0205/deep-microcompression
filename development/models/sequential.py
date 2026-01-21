@@ -120,25 +120,44 @@ class Sequential(nn.Sequential):
         else:
             raise IndexError(f"Unknown index {idx}")
         
-    # def __add__(self, other) -> "Sequential":
+    def __add__(self, other) -> "Sequential":
 
-    #     result = Sequential()
-    #     print(other)
-    #     for layer in self:
-    #         result = result + layer
+        result = Sequential()
+        for name, layer in self.names_layers():
+            result.add_layer(name=name, layer=layer)        
         
-    #     if isinstance(other, Sequential):
-    #         for layer in other:
-    #             result = result + layer
-    #         return result
-    #     elif isinstance(other, Layer):
-    #         idx = result.class_idx.get(other.__class__.__name__, -1) + 1
-    #         result.class_idx[other.__class__.__name__] = idx
-    #         layer_type = other.__class__.__name__.lower()
-    #         result.add_module(f"{layer_type}_{idx}", other)
-    #         return result
-    #     raise RuntimeError(f"cannot add type{other} to Sequential")
+        if isinstance(other, Sequential):
+            for layer in other:
+                result.add_layer(layer=layer)        
+            return result
+        elif isinstance(other, Layer):
+            result.add_layer(other) 
 
+            return result
+        raise RuntimeError(f"cannot add type{other} to Sequential")
+    
+    def add_layer(self, layer: Union[Layer, nn.Module], name: str="") -> None:
+        """
+        Adds a layer and preserves the naming layer_idx, 
+        internally it uses the _modules container for to store the layers.
+        """
+        if (not name):
+            idx = self.class_idx.get(layer.__class__.__name__, -1) + 1
+            layer_type = layer.__class__.__name__.lower()
+            name = f"{layer_type}_{idx}"
+        else:
+            layer_type, idx = name.split("_")
+            try:
+                idx = int(idx)
+                old_idx = self.class_idx.get(layer.__class__.__name__, -1)
+                assert idx > old_idx, f"Adding layer {name} to self will over-write the another layer."
+            except ValueError:
+                # Do not update the class idx if idx is not an int
+                pass
+            
+        self.class_idx[layer.__class__.__name__] = idx
+        return super().add_module(name, layer) 
+        
 
     @property
     def is_compressed(self) -> bool:
@@ -172,11 +191,11 @@ class Sequential(nn.Sequential):
     
     @output_quantize.setter
     def output_quantize(self, _: Any):
-    # Read-only property derived from the final layer's state
+        # Read-only property derived from the final layer's state
         pass
 
 
-    def forward(self, input):
+    def forward(self, input:torch.Tensor):
         """
         Forward pass executing the DMC inference pipeline.
         
@@ -209,7 +228,9 @@ class Sequential(nn.Sequential):
 
 
     def fit(
-        self, train_dataloader: data.DataLoader, epochs: int, 
+        self, 
+        train_dataloader: data.DataLoader, 
+        epochs: int, 
         criterion_fun: torch.nn.Module, 
         optimizer_fun: torch.optim.Optimizer,
         lr_scheduler: Optional[torch.optim.lr_scheduler.LRScheduler] = None,
@@ -370,8 +391,8 @@ class Sequential(nn.Sequential):
 
     def init_compress(
         self,
-        config: dict,
-        input_shape: tuple,
+        config: Dict,
+        input_shape: Tuple,
         calibration_data: Optional[torch.Tensor] = None
     ) -> "Sequential":
         """
@@ -399,6 +420,7 @@ class Sequential(nn.Sequential):
             A new, independent Sequential instance configured for the requested 
             compression pipeline.
         """
+        config = copy.deepcopy(config)
         # Validate configuration against supported DMC schemes
         if not self.is_compression_config_valid(config):
             raise ValueError("Invalid compression configuration!")
@@ -436,7 +458,12 @@ class Sequential(nn.Sequential):
         
 
 
-    def is_compression_config_valid(self, compression_config):
+    def is_compression_config_valid(
+        self, 
+        compression_config:Dict[str, Any], 
+        compression_keys:Optional[List]=None, 
+        raise_error:bool=True
+    ) -> bool:
         """
         Validates the compression configuration against DMC hardware constraints.
 
@@ -449,7 +476,10 @@ class Sequential(nn.Sequential):
         Returns:
             True if configuration is valid and deployable, False otherwise.
         """
-        for configuration_type in compression_config.keys():
+        if compression_keys is None:
+            compression_keys = list(compression_config.keys())
+
+        for configuration_type in compression_keys:
 
             if configuration_type == "prune_channel":
                 prune_channel_config = compression_config.get("prune_channel")
@@ -468,25 +498,29 @@ class Sequential(nn.Sequential):
                 elif isinstance(sparsity, dict):
                     for name, layer_sparsity in sparsity.items():
                         # Skip if layer cannot be pruned (
-                        if self[name].get_prune_channel_possible_hypermeters() is None:
+                        if self[name].get_prune_channel_possible_hyperparameters() is None:
                             continue
                         if not isinstance(layer_sparsity, (float, int)):
+                            if raise_error:
+                                raise TypeError(f"layer sparsity has to be of type of float or int not {type(layer_sparsity)} for layer {name}!")
                             return False
-                            # raise TypeError(f"layer sparsity has to be of type of float or int not {type(layer_sparsity)} for layer {name}!")
                         if name not in self.names():
+                            if raise_error:
+                                raise NameError(f"Found unknown layer name {name}")
                             return False
-                            # raise NameError(f"Found unknown layer name {name}")
                         if not isinstance(layer_sparsity, float) and \
-                            layer_sparsity not in self[name].get_prune_channel_possible_hypermeters():
+                            layer_sparsity not in self[name].get_prune_channel_possible_hyperparameters():
+                            if raise_error:
+                                raise ValueError(f"Recieved a layer_sparsity of {layer_sparsity} ")
                             return False
-                            # raise ValueError(f"Recieved a layer_sparsity of {layer_sparsity} ")
                     for name in self.names():
                         # if name not in sparsity and self.layers[name].is_prunable():
                         if name not in sparsity:
                             sparsity[name] = 0
                 else:
+                    if raise_error:
+                        raise TypeError(f"prune sparsity has to be of type of float or dict not {type(sparsity)}!")
                     return False
-                    # raise TypeError(f"prune sparsity has to be of type of float or dict not {type(sparsity)}!")
                 
                 prune_channel_config["sparsity"] = sparsity
 
@@ -497,22 +531,25 @@ class Sequential(nn.Sequential):
                 bitwidth = quantize_config["bitwidth"]
                 
                 if bitwidth is not None and bitwidth > 8:
+                    if raise_error:
+                        raise ValueError(f"Invalid quantization bitwidth, {bitwidth}")
                     return False
-                    # raise ValueError(f"Invalid quantization bitwidth")
 
                 if scheme == QuantizationScheme.NONE and (bitwidth is not None or granulatity is not None) or \
                     (bitwidth is None or granulatity is None) and scheme != QuantizationScheme.NONE:
+                    if raise_error:
+                        raise ValueError("When quantization scheme is NONE, bitwidth and granularity has to be None and vice versa.")
                     return False
-                    # raise ValueError("When quantization scheme is NONE, bitwidth and granularity has to be None and vice versa.")
                 
             else:
+                if raise_error:
+                    raise ValueError(f"Invalid configuration scheme of {configuration_type}")                
                 return False
-                # raise ValueError(f"Invalid configuration scheme of {configuration_type}")                
         return True
 
 
     
-    def init_prune_channel(self):
+    def init_prune_channel(self) -> None:
         """
         Executes Structured Channel Pruning.
 
@@ -539,7 +576,7 @@ class Sequential(nn.Sequential):
                 sparsity[name], keep_prev_channel_index, input_shape,
                 is_output_layer=False, metric=metric
             )
-            _, input_shape = layer.get_output_tensor_shape(input_shape)
+            _, input_shape = layer.get_output_tensor_shape(torch.Size(input_shape))
 
 
         # Prune last layer
@@ -550,7 +587,7 @@ class Sequential(nn.Sequential):
         )
         return 
     
-    def get_prune_channel_possible_hypermeters(self) -> Dict:
+    def get_prune_channel_possible_hyperparameters(self) -> Dict[str, Iterable]:
         """
         Defines the valid search space for Structured Pruning.
 
@@ -566,12 +603,15 @@ class Sequential(nn.Sequential):
         prune_possible_hypermeters = dict()
 
         for name, layer in list(self.names_layers())[:-1]:
-            layer_prune_possible_hypermeters = layer.get_prune_channel_possible_hypermeters()
+            layer_prune_possible_hypermeters = layer.get_prune_channel_possible_hyperparameters()
             if layer_prune_possible_hypermeters is not None:
-                prune_possible_hypermeters[name] = layer_prune_possible_hypermeters
+                prune_possible_hypermeters[f"sparsity.{name}"] = layer_prune_possible_hypermeters
+
+        # TODO: To extend to other metric type
+        prune_possible_hypermeters["metric"] = ["l2"]
         return prune_possible_hypermeters
     
-    def get_quantize_possible_hyperparameters(self) -> Dict:
+    def get_quantize_possible_hyperparameters(self) -> Dict[str, Iterable]:
         """
         Defines the valid search space for Quantization.
         """
@@ -581,48 +621,28 @@ class Sequential(nn.Sequential):
             "bitwidth" : [None, 2, 4, 8]
         }
     
-    def get_all_compression_hyperparameter(self) -> List:
+
+    def get_commpression_possible_hyperparameters(self) -> Dict[str, Iterable]:
         """
-        Generates the exhaustive Grid Search space for model optimization.
-
-        This utility creates every possible combination of Pruning and Quantization 
-        configurations. It enables the automated search that identified the 
-        specific configuration.
-
-        Returns:
-            A list of flattened configuration dictionaries, each representing 
-            a unique candidate model state.
+        Defines the valid search space for Compression.
+        
+        :return: compression_hyperparameters: this is a dictionary with keys as
+                 the compression parameter name from its root join by ".". Basically
+                 it is a flatted dict with each level indicated by a "."
         """
-        def flatten_dict(dic, parent_name=""):
-            flat_dic = {}
-            for name, value in dic.items():
-                full_name = f"{parent_name}.{name}" if parent_name else f"{name}"
-                if isinstance(value, dict):
-                    flat_dic.update(flatten_dict(value, full_name))
-                elif isinstance(value, Iterable) and not isinstance(value, (str, bytes)):
-                    flat_dic[full_name] = value
-                else:
-                    raise ValueError(f"Recieved {type(value)} for {full_name}, it should be an Iterable, which is not a dict or str!")
-            return flat_dic
+        prune_hp = self.get_prune_channel_possible_hyperparameters()
+        quant_hp = self.get_quantize_possible_hyperparameters()
 
-        def get_all_combinations(flat_dict: dict[str, object]) -> list[dict[str, object]]:
-            """Generates Cartesian product of all hyperparameter options."""
-            keys = list(flat_dict.keys())
-            values = list(flat_dict.values())
-            product = itertools.product(*values)
+        compression_hp = dict()
+        for name, hp in prune_hp.items():
+            compression_hp[f"prune_channel.{name}"] = hp
+        
+        for name, hp in quant_hp.items():
+            compression_hp[f"quantize.{name}"] = hp
 
-            return [dict(zip(keys, compression_comb)) for compression_comb in product]
+        return compression_hp
 
-        return get_all_combinations(flatten_dict({
-            "prune_channel" : {
-                "sparsity" : self.get_prune_channel_possible_hypermeters(),
-                "metric" : ["l2", "l1"],
-            },
-            "quantize" : self.get_quantize_possible_hyperparameters()
-        }))
-
-
-    def decode_compression_dict_hyperparameter(self, compression_dict):
+    def decode_compression_dict_hyperparameter(self, compression_dict: Dict[str, Any]) -> Dict[str, Iterable]:
         """
         Reconstructs a hierarchical configuration dictionary from a flattened 
         search result.
@@ -651,7 +671,7 @@ class Sequential(nn.Sequential):
         return compression_config
         
     
-    def init_quantize(self, calibration_data=None):
+    def init_quantize(self, calibration_data:Optional[torch.Tensor]=None) -> None:
         """
         Initializes the Quantization stage.
 
@@ -685,6 +705,7 @@ class Sequential(nn.Sequential):
         # We run a forward pass with calibration data to let the observers
         self.train() # Ensure observers are updating
         if scheme == QuantizationScheme.STATIC:
+            assert calibration_data is not None, f"Pass a calibration data when doing static quantization"
             self.to(calibration_data.device)
             self(calibration_data)
 
@@ -692,7 +713,7 @@ class Sequential(nn.Sequential):
 
 
 
-    def fuse(self, batchnorm_only: bool = False) -> "Sequential":
+    def fuse(self, batchnorm_only:bool=False, device:Optional[str]=None) -> "Sequential":
         """
         Fuses adjacent layers to optimize inference speed and reduce footprint.
 
@@ -761,11 +782,14 @@ class Sequential(nn.Sequential):
         fused_model.add_module(current_name, current_layer)
 
         init_dmc_parameter(self, fused_model)
+        
+        if device:
+            fused_model.to(device=device)
 
         return fused_model
 
         
-    def get_size_in_bits(self):
+    def get_size_in_bits(self) -> int:
         """Calculates total model size in bits (Sum of all packed layers)."""
         size = 0
         for layer in self.layers():
@@ -773,7 +797,7 @@ class Sequential(nn.Sequential):
         return size
     
 
-    def get_size_in_bytes(self):
+    def get_size_in_bytes(self) -> int:
         """
         Calculates total model binary size in Bytes.
         """
@@ -781,7 +805,7 @@ class Sequential(nn.Sequential):
 
 
 
-    def get_max_workspace_arena(self, input_shape) -> Tuple:
+    def get_max_workspace_arena(self, input_shape:Tuple) -> Tuple:
         """
         Calculates the minimum SRAM (Static RAM) required for inference.
 
@@ -808,15 +832,19 @@ class Sequential(nn.Sequential):
         max_output_odd_size = 0
         
         size_division_because_quant = 1
+        
+        scheme = None
         if self.is_quantized:
-            bitwidth = self.__dict__["_dmc"]["compression_config"]["quantize"]["bitwidth"]
-            size_division_because_quant = (8 // bitwidth)
+            scheme = self.__dict__["_dmc"]["compression_config"]["quantize"]["scheme"]
+
+            if scheme == QuantizationScheme.STATIC:
+                bitwidth = self.__dict__["_dmc"]["compression_config"]["quantize"]["bitwidth"]
+                size_division_because_quant = (8 // bitwidth)
 
         output_shape = input_shape
         # Track maximum tensor sizes at even/odd layers
         for i, layer in enumerate(self.layers()):
-            max_layer_shape, output_shape = layer.get_output_tensor_shape(input_shape)
-
+            max_layer_shape, output_shape = layer.get_output_tensor_shape(torch.Size(input_shape))
             # Calculate bytes required (applying packing factor)
             input_size = math.ceil(input_shape.numel() / size_division_because_quant)
             max_layer_size = math.ceil(max_layer_shape.numel() / size_division_because_quant)
@@ -842,12 +870,22 @@ class Sequential(nn.Sequential):
 
 
     @torch.no_grad()
-    def convert_to_c(self, input_shape, var_name: str, src_dir: str = "./", include_dir:str = "./", test_input = None) -> None:
+    def convert_to_c(
+        self, 
+        input_shape:Tuple, 
+        var_name:str, 
+        src_dir:str="./", 
+        include_dir:str = "./", 
+        test_input:Optional[torch.Tensor]=None
+    ) -> None:
         """Generate C code for deployment
         
         Args:
             var_name: Base name for generated files
             dir: Output directory for generated files
+            input_shape: Shape of the model input tensor
+            test_input: Optional test input tensor to generate C array
+            for_arduino: If True, generates Arduino-compatible C code, add PROGMEM if needed to ensure the params are stored in flash memory.
         """
         """
         Generates the dependency-free C library for bare-metal deployment.
@@ -873,16 +911,16 @@ class Sequential(nn.Sequential):
         
         # Initialize file contents
         header_file = f"#ifndef {var_name.upper()}_H\n#define {var_name.upper()}_H\n\n"
-        header_file += "#include <stdint.h>\n#include \"deep_microcompression.h\"\n\n\n"
+        if not for_arduino:
+            header_file += "#include <stdint.h>\n#include \"deep_microcompression.h\"\n\n\n"
+        else:
+            header_file += "#include <stdint.h>\n#include <Arduino.h>\n#include \"deep_microcompression.h\"\n\n\n"
 
         definition_file = f"#include \"{var_name}.h\"\n\n"
         param_definition_file = f"#include \"{var_name}.h\"\n\n"
     
         # Calculate workspace requirements
         max_output_even_size, max_output_odd_size = self.get_max_workspace_arena(input_shape)
-
-        # Configure workspace based on quantization
-        # if getattr(self, "quantize_type", QUANTIZATION_NONE) != STATIC_QUANTIZATION_PER_TENSOR:
         
         scheme = None
         if self.is_quantized:
@@ -922,13 +960,13 @@ class Sequential(nn.Sequential):
 
             layers_def += f"    &{layer_name},\n"
 
-            layer_header, layer_def, layer_param_def = layer.convert_to_c(layer_name, input_shape)
+            layer_header, layer_def, layer_param_def = layer.convert_to_c(layer_name, input_shape, for_arduino=for_arduino)
             layers_header += layer_header
 
             param_definition_file += layer_param_def
             definition_file += layer_def 
 
-            _, input_shape = layer.get_output_tensor_shape(input_shape)  
+            _, input_shape = layer.get_output_tensor_shape(torch.Size(input_shape))  
         
         layers_def += "};\n"
         definition_file += layers_def
@@ -948,7 +986,12 @@ class Sequential(nn.Sequential):
                 bitwidth = self.__dict__["_dmc"]["compression_config"]["quantize"]["bitwidth"]
 
             if self.is_quantized and self.__dict__["_dmc"]["compression_config"]["quantize"]["scheme"] == QuantizationScheme.STATIC:
-                _, test_input_def = convert_tensor_to_bytes_var(self.input_quantize.apply(test_input), "test_input", self.input_quantize.bitwidth)
+                _, test_input_def = convert_tensor_to_bytes_var(
+                    self.input_quantize.apply(test_input), 
+                    "test_input", 
+                    self.input_quantize.bitwidth,
+                    for_arduino=for_arduino
+                )
                 # test_input_def = f"\nconst int8_t test_input[] = {{\n"
                 # for line in torch.split(self.input_quantize.apply(test_input).flatten(), 28):
                 #     test_input_def += "    " + ", ".join(
@@ -957,7 +1000,11 @@ class Sequential(nn.Sequential):
                 # test_input_def += "};\n"
             else:
                     _, test_input_def = convert_tensor_to_bytes_var(test_input, "test_input",)
-                    test_input_def = f"\nconst float test_input[] = {{\n"
+                    if not for_arduino:
+                        test_input_def = f"\nconst float test_input[] = {{\n"
+                    else:
+                        test_input_def = f"#include <Arduino.h>\n\nconst float test_input[] PROGMEM= {{\n"
+
                     for line in torch.split(test_input.flatten(), 28):
                         test_input_def += "    " + ", ".join(
                             [f"{val:.4f}" for val in line]
@@ -1003,7 +1050,7 @@ class Sequential(nn.Sequential):
             assert criterion_fun is not None
             assert optimizer_fun is not None
 
-        prune_channel_hp = self.get_prune_channel_possible_hypermeters()
+        prune_channel_hp = self.get_prune_channel_possible_hyperparameters()
         prune_channel_layers_sensity = {metric_name: dict() for metric_name in metrics.keys()}
 
         for layer_name, layer_prune_channel_hp in tqdm(prune_channel_hp.items()):
@@ -1050,92 +1097,6 @@ class Sequential(nn.Sequential):
                         prune_channel_layers_sensity[metric_name][layer_name].append((layer_prune_channel/max_layer_prune_channel_hp, prune_channel_model_metrics[metric_name]))
         return prune_channel_layers_sensity
     
-    def get_nas_prune_channel(
-        self,
-        input_shape, 
-        data_loader, 
-        metric_fun, 
-        device="cpu",
-        num_data=100,
-        train = False,
-        train_dataloader = None,
-        epochs = None,
-        criterion_fun = None,
-        lr_scheduler = None,
-        callbacks = [],
-        random_seed = None
-    ) -> List:
-        """
-        Generates data for Neural Architecture Search (NAS) / Random Search.
-
-        It randomly samples valid channel counts for ALL layers simultaneously 
-        to explore the global sparsity space, rather than just local sensitivity.
-
-        Args:
-            num_data: Number of random architectures to sample.
-        
-        Returns:
-            List of [param_1, param_2, ..., param_n, accuracy] vectors.
-        """
-        import random
-        if random_seed: random.seed(random_seed)
-        
-        def get_all_combinations(flat_dict: dict[str, Iterable]):
-            keys = list(flat_dict.keys())
-            values = list(flat_dict.values())
-            product = itertools.product(*values)
-
-            yield from (comb for comb in product)
-        
-        if train:
-            assert train_dataloader is not None
-            assert epochs is not None
-            assert criterion_fun is not None
-
-        prune_channel_hp = self.get_prune_channel_possible_hypermeters()
-        param = []
-
-        for _ in range(num_data):
-            prune_param_config = dict()
-            prune_param = list()
-            for layer_name, layer_prune_channel_hp in prune_channel_hp.items():
-                random_layer_prune_channel_hp = random.choice(layer_prune_channel_hp)
-                prune_param.append(random_layer_prune_channel_hp)
-                prune_param_config[layer_name] = random_layer_prune_channel_hp
-
-                compression_config = {
-                    "prune_channel" :{
-                        "sparsity" : prune_param_config,
-                        "metric" : "l2"
-                    },
-                }
-            
-            prune_channel_model = self.init_compress(config=compression_config, input_shape=input_shape)
-
-            if train:
-                optimizer_fun = torch.optim.SGD(prune_channel_model.parameters(), lr=1e-3, momentum=.9, weight_decay=5e-4)
-                lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer_fun, mode="min", patience=1)
-
-                prune_channel_model.fit(
-                    train_dataloader=train_dataloader,
-                    epochs=epochs,
-                    criterion_fun=criterion_fun,
-                    optimizer_fun=optimizer_fun,
-                    lr_scheduler=lr_scheduler,
-                    validation_dataloader=data_loader,
-                    metrics={"metric": metric_fun},
-                    verbose=False,
-                    callbacks=callbacks,
-                    device=device
-                )
-
-                prune_channel_model_metric = prune_channel_model.evaluate(data_loader=data_loader, metrics={"metric": metric_fun}, device=device)
-            else:
-                prune_channel_model_metric = prune_channel_model.evaluate(data_loader=data_loader, metrics={"metric": metric_fun}, device=device)
-
-
-            param.append(prune_param + [prune_channel_model_metric["metric"]])
-        return param
 
     def get_weight_distributions(self, bins=256) -> Dict[str, Optional[torch.Tensor]]:
         """Get weight histograms for all layers

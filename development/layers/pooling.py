@@ -60,7 +60,7 @@ class MaxPool2d(Layer, nn.MaxPool2d):
         return keep_prev_channel_index
 
 
-    def get_prune_channel_possible_hypermeters(self):
+    def get_prune_channel_possible_hyperparameters(self):
         return None
 
     def init_quantize(self, bitwidth, scheme, granularity, previous_output_quantize = None):
@@ -103,9 +103,14 @@ class MaxPool2d(Layer, nn.MaxPool2d):
     
 
     @torch.no_grad()
-    def convert_to_c(self, var_name, input_shape):
+    def convert_to_c(self, var_name, input_shape, for_arduino=False):
         """
         Generates C code for bare-metal deployment.
+
+        Args:
+            var_name: Variable name to use in generated code
+            input_shape: Shape of the input tensor
+            for_arduino: Flag for Arduino-specific code generation, to add PROGMEM if needed
         
         Exports structural parameters (Kernel, Stride, Padding) so the 
         generic C implementation can execute the loop.
@@ -165,7 +170,7 @@ class AvgPool2d(Layer, nn.AvgPool2d):
         return keep_prev_channel_index
 
 
-    def get_prune_channel_possible_hypermeters(self):
+    def get_prune_channel_possible_hyperparameters(self):
         return None
     
 
@@ -202,12 +207,14 @@ class AvgPool2d(Layer, nn.AvgPool2d):
     
 
     @torch.no_grad()
-    def convert_to_c(self, var_name, input_shape):
+    def convert_to_c(self, var_name, input_shape, for_arduino=False):
         """Generate C code declarations for this layer
         
         Args:
             var_name: Variable name to use in generated code
-            
+            input_shape: Shape of the input tensor
+            for_arduino: Flag for Arduino-specific code generation, to add PROGMEM if needed
+
         Returns:
             Tuple of (header declaration, layer definition, parameter definition)
         """

@@ -446,7 +446,13 @@ def int2_to_bytes(data: list) -> list:
         byte = ((byte << 2) | (val & 0x03))
     return list(struct.pack("<b", byte))
 
-def pack_int_to_byte(byte_list, bitwidth):
+def pack_into_byte(byte_list, bitwidth):
+    """Packs a list of bytes into a single byte
+
+    Args:
+        byte_list: List of containing data to be packed
+        bitwidth: the bitwidth which the data are, i.e. 8, 4, 2
+    """
     assert len(byte_list) <= 8 // bitwidth, f"byte list of lenght {len(byte_list)} cannot be pack into 8 bit withs bitwidth {bitwidth}"
     shift = bitwidth
     mask = (1 << bitwidth) - 1
@@ -457,13 +463,15 @@ def pack_int_to_byte(byte_list, bitwidth):
 
 def convert_tensor_to_bytes_var(tensor: torch.Tensor, 
                                var_name: str, 
-                               bitwidth: Optional[int] = 8) -> tuple:
+                               bitwidth: Optional[int] = 8,
+                               for_arduino = False) -> tuple:
     """Convert tensor to C-style byte array declaration
     
     Args:
         tensor: Input tensor to convert
         var_name: Name to use for variable
         bitwidth: Bitwidth for quantization (if applicable)
+        for_arduino: If True, generates Arduino-compatible C code, add PROGMEM if needed to ensure the params are stored in flash memory.
         
     Returns:
         Tuple of (header string, definition string)
@@ -478,8 +486,15 @@ def convert_tensor_to_bytes_var(tensor: torch.Tensor,
         byte_convert = int8_to_bytes
         byte_per_line = INT8_BYTE_PER_LINE
 
-    var_header_str = f"extern const uint8_t {var_name}[];\n"
-    var_def_str = f"\nconst uint8_t {var_name}[] = {{\n"
+    if not for_arduino:
+        var_header_str = f"extern const uint8_t {var_name}[];\n"
+        var_def_str = f"\nconst uint8_t {var_name}[] = {{\n"
+    else:
+        # Fix to enforce that the weight are loaded in flash and not in RAM.
+        # By default Arduino loads all global variable on the RAM.
+        # https://docs.arduino.cc/language-reference/en/variables/utilities/PROGMEM/
+        var_header_str = f"extern const uint8_t {var_name}[] PROGMEM;\n"
+        var_def_str = f"\nconst uint8_t {var_name}[] PROGMEM = {{\n"
 
     if tensor.dtype != torch.int8 or bitwidth == 8:
         # Standard byte conversion for non-packed data
@@ -494,29 +509,15 @@ def convert_tensor_to_bytes_var(tensor: torch.Tensor,
             # for i in range(math.ceil(len(line)/data_per_byte)):
         tensor = tensor.flatten()
 
-        # if bitwidth == 4:
-        #     byte_convert = int4_to_bytes
-        # elif bitwidth == 2:
-        #     byte_convert = int2_to_bytes
-        # else:
-        #     raise RuntimeError(f"Conversion of model to quantized {bitwidth} bitwidth not support with packing!!")
-
         for line in torch.split(tensor.flatten(), INT8_BYTE_PER_LINE * data_per_byte):
             bytes = []
             for i in range(math.ceil(len(line)/data_per_byte)):
                 data = []
                 for pos in range(data_per_byte):
-                    data.append(line[(i*data_per_byte)+pos])
-                # bytes.append(byte_convert(data))
-                bytes.append(pack_int_to_byte(data, bitwidth))
-
-            # if len(line)%data_per_byte != 0:
-            #     data = []
-            #     i = len(line)//data_per_byte
-            #     for pos in range(len(line)%data_per_byte):
-            #         data.append(line[(i*data_per_byte)+pos])
-            #         # bytes.append(byte_convert(data))
-            #         bytes.append(pack_int_to_byte(data, bitwidth))
+                    index = (i*data_per_byte)+pos
+                    if index < len(line):
+                        data.append(line[index])
+                bytes.append(pack_into_byte(data, bitwidth))
 
             var_def_str += "    " + ", ".join(
                 [f"0x{b:02X}" for val in bytes for b in val]

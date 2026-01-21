@@ -72,7 +72,7 @@ class ReLU(Layer, nn.ReLU):
         # Nothing to do
         return keep_prev_channel_index
 
-    def get_prune_channel_possible_hypermeters(self):
+    def get_prune_channel_possible_hyperparameters(self):
         return None
     
 
@@ -103,11 +103,13 @@ class ReLU(Layer, nn.ReLU):
     
     
     @torch.no_grad()
-    def convert_to_c(self, var_name, input_shape):
+    def convert_to_c(self, var_name, input_shape, for_arduino=False):
         """Generates C code declarations for this layer
         
         Args:
             var_name: Variable name to use in generated code
+            input_shape: Shape of the input tensor
+            for_arduino: Flag for Arduino-specific code generation, to add PROGMEM if needed
             
         Returns:
             Tuple of (header declaration, layer definition, parameter definition)
@@ -172,7 +174,7 @@ class ReLU6(Layer, nn.ReLU6):
         return keep_prev_channel_index
 
 
-    def get_prune_channel_possible_hypermeters(self):
+    def get_prune_channel_possible_hyperparameters(self):
         return None
     
     def init_quantize(self, bitwidth, scheme, granularity, previous_output_quantize = None):
@@ -201,11 +203,13 @@ class ReLU6(Layer, nn.ReLU6):
     
     
     @torch.no_grad()
-    def convert_to_c(self, var_name, input_shape):
+    def convert_to_c(self, var_name, input_shape, for_arduino=False):
         """Generates C code declarations for this layer
         
         Args:
             var_name: Variable name to use in generated code
+            input_shape: Shape of the input tensor
+            for_arduino: Flag for Arduino-specific code generation, to add PROGMEM if needed
             
         Returns:
             Tuple of (header declaration, layer definition, parameter definition)
