@@ -7,6 +7,7 @@ the relationship between compression parameters (e.g., sparsity configurations)
 and model performance. It serves as a surrogate model to speed up the search 
 process for optimal compression ratios.
 """
+from typing import Dict, Iterable, List, Any
 
 import torch
 from torch import nn
@@ -53,22 +54,22 @@ class Estimator:
         # Input normalization (Affine=False acts as fixed scaling if params are frozen, 
         # but here it learns during training)
         layers.append(nn.BatchNorm1d(input_features, affine=False))
-        layers.append(Linear(input_features, hidden_dim[0]))
+        layers.append(nn.Linear(input_features, hidden_dim[0]))
         layers.append(nn.BatchNorm1d(hidden_dim[0]))
-        layers.append(ReLU(inplace=True))
+        layers.append(nn.ReLU(inplace=True))
         layers.append(nn.Dropout(dropout))
 
         input_features = hidden_dim[0]
         for h in hidden_dim[1:]:
             output_features = h
 
-            layers.append(Linear(input_features, output_features))
+            layers.append(nn.Linear(input_features, output_features))
             layers.append(nn.BatchNorm1d(output_features))
-            layers.append(ReLU(inplace=True))
+            layers.append(nn.ReLU(inplace=True))
             layers.append(nn.Dropout(dropout))
 
             input_features = output_features
-        layers.append(Linear(input_features, 1))
+        layers.append(nn.Linear(input_features, 1))
         self.model = Sequential(*layers).to(self.device)
 
         self.optimizer_fun = torch.optim.Adam(self.model.parameters(), lr=1e-3)
@@ -131,3 +132,90 @@ class Estimator:
         if X.dim() == 1:
             X = X.unsqueeze(0)
         return self.model(X).item()
+
+
+class ConfigEncoder:
+    """
+    Handles the conversion of a raw configuration dictionary into a 
+    flat Tensor suitable for the neural network.
+    """
+    def __init__(
+            self, 
+            search_space: Dict[str, Iterable],
+            categorical_keys:List[str] = [
+                "prune.metrics", 
+                "quantize.scheme", 
+                "quantize.granularity", 
+                "quantize.bitwidth"
+            ],
+            dtype:torch.dtype=torch.float32
+        ):
+        self.search_space = search_space
+        self.encoders = {}
+        self.feature_dim = 0
+
+        # Categorical/Enum Fields (One-Hot Encoding)
+        self.categorical_keys = categorical_keys
+        self.dtype = dtype
+        
+        # Pre-compute normalisation constants and category maps
+        self._setup_encoders()
+
+    def _setup_encoders(self):
+        """
+        Sets up the encoder to handle the data normalisation and one-hot encoding for categorical mapping
+        """
+
+        # Normalize Integer Ranges, with the max value
+        for key in self.search_space:
+            if key not in self.categorical_keys:
+                # Store the max value for normalization (e.g., 6, 16, 84)
+                self.encoders[key] = {"type": "nominal", "max": max(self.search_space[key])}
+                self.feature_dim += 1
+
+        for key in self.categorical_keys:
+            # Create a mapping from Value -> Index
+            # Handle 'None' explicitly by converting everything to string for consistency
+            unique_vals = list(self.search_space[key])
+            val_to_idx = {str(v): i for i, v in enumerate(unique_vals)}
+            
+            self.encoders[key] = {
+                "type": "categorical", 
+                "map": val_to_idx, 
+                "size": len(unique_vals)
+            }
+            self.feature_dim += len(unique_vals)
+
+
+    def encode(self, config:Dict[str, Any]) -> torch.Tensor:
+        """
+        Encodes the network configuration to numerical types that can be ingested by the estimator
+        model 
+
+        :param: config: the model congiration to be converted to a valid input for the estimator
+
+        :return: config_tensor: the tensor of the model config encoded to a numerical format to be
+                 be ingested by the model
+        """
+        vector = []
+        
+        # Encode integer type, normalized as float
+        for key in self.search_space:
+            if key not in self.categorical_keys:
+                val = config.get(key, 0) # Default to 0 if missing
+                max_val = self.encoders[key]['max']
+                vector.append(val / max_val if max_val > 0 else 0)
+
+        # Encode Categorical (One-Hot)
+        for key in self.categorical_keys:
+            enc_info = self.encoders[key]
+            val = str(config.get(key)) # Convert input to string to match key map
+            
+            # Create One-Hot Vector
+            one_hot = [0] * enc_info['size']
+            if val in enc_info['map']:
+                idx = enc_info['map'][val]
+                one_hot[idx] = 1
+            vector.extend(one_hot)
+            
+        return torch.tensor(vector, dtype=self.dtype)
