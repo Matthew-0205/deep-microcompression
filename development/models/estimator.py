@@ -48,7 +48,7 @@ class Estimator:
         """
         self.device = device
 
-        assert len(list(data.values())[0]) > 3, f"The data must have at least three datapoints got {len(list(data.values())[0])}"
+        assert len(list(data.values())[0]) > 2, f"The data must have more than two datapoints got {len(list(data.values())[0])}"
         self.encoder = ConfigEncoder(search_space=search_space)
         self.data = torch.tensor(self.encoder(data, with_metric=True), dtype=torch.float32, device=self.device)
 
