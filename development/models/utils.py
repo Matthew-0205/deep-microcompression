@@ -1,7 +1,7 @@
 import random
 import itertools
 from collections import defaultdict
-from typing import Iterable, List, Dict, Tuple, Optional, Callable
+from typing import Iterable, List, Dict, Tuple, Optional, Callable, Union
 
 import numpy as np
 from tqdm.auto import tqdm
@@ -285,7 +285,7 @@ def brute_force_search_compression_config(
         )
 
         size = compressed.get_size_in_bytes() / original_size
-        ram = sum(compressed.get_max_workspace_arena(input_shape)) / 2
+        ram = compressed.get_min_workspace_arena(input_shape) / 2
 
         # -------- HARD FILTERS --------
         if not condition(metric, size, ram, compression_config):
@@ -309,6 +309,7 @@ def evolutionary_search_compression_config(
     estimator:Estimator,
     input_shape:Tuple,
     calibration_data:torch.Tensor,
+    device:str="cpu",
     condition:Callable=lambda metric, size, ram, config: True,                 # list of filters
     objective:Callable=lambda metric, size, ram, config: metric,                  # objective function, default objective = maximize metric
     maximize:bool=True,                   # maximize or minimize?
@@ -326,6 +327,8 @@ def evolutionary_search_compression_config(
 
     # Analyze Search Space
     search_space = model.get_commpression_possible_hyperparameters()
+
+    calibration_data = calibration_data.to(device=device)
     
     param_names = list(search_space.keys())
     param_values = list(search_space.values()) # List of lists of valid values
@@ -357,16 +360,16 @@ def evolutionary_search_compression_config(
             raise_error=False
         ):
             return (float("-inf") if maximize else float("inf")), [None, None, None]
-            
-
+        
         metric = estimator.predict(compression_config) / original_metric
+
         compressed = model.init_compress(
             model.decode_compression_dict_hyperparameter(compression_config),
-            input_shape, calibration_data=calibration_data
+            input_shape, calibration_data=calibration_data, device=device
         )
 
         size = compressed.get_size_in_bytes() / original_size
-        ram = sum(compressed.get_max_workspace_arena(input_shape)) / 2
+        ram = compressed.get_min_workspace_arena(input_shape) / 2
 
         # -------- HARD FILTERS --------
         if not condition(metric, size, ram, compression_config):
