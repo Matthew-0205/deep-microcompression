@@ -11,8 +11,6 @@
 
 #include "sequential.h"
 
-#if !defined(QUANTIZATION_SCHEME) || QUANTIZATION_SCHEME != STATIC
-
 /**
  * @brief Constructs a floating-point sequential model
  * @param layers Array of layer pointers
@@ -42,43 +40,23 @@ float* Sequential::predict(void) {
 
     for (uint8_t i = 0; i < this->layers_len; i++) {
         current_input = this->layers[i]->forward(current_input, this->input, workspace_size);
-        // switch (i % 2) {
-        //     case DLAI_EVEN:
-        //         next_input = this->layers[i]->forward(this->input, nullptr);
-        //         break;
-        //     default:
-        //         next_input = this->layers[i]->forward(next_input, this->input);
-        //         break;
-        // }
     }
     return current_input;
 }
 
 
-#else // QUATIZATION_SCHEME
-
-Sequential::Sequential(Layer **layers, uint8_t layers_len, int8_t *workspace, uint32_t workspace_size) {
+Sequential_SQ::Sequential_SQ(Layer_SQ **layers, uint8_t layers_len, int8_t *workspace, uint32_t workspace_size) {
     this->layers = layers;
     this->layers_len = layers_len;
     this->input = workspace;
     this->workspace_size = workspace_size;
 }
 
-int8_t* Sequential::predict(void) {
+int8_t* Sequential_SQ::predict(void) {
     int8_t* current_input = this->input;
 
     for (uint8_t i = 0; i < this->layers_len; i++) {
         current_input = this->layers[i]->forward(current_input, this->input, workspace_size);
-        // switch (i % 2) {
-        //     case DLAI_EVEN:
-        //         next_input = this->layers[i]->forward(input=this->input, start=nullptr);
-        //         break;
-        //     default:
-        //         next_input = this->layers[i]->forward(input=next_input, start=this->input);
-        //         break;
-        // }
     }
     return current_input;
 }
-
-#endif // QUANTIZATION_SCHEME

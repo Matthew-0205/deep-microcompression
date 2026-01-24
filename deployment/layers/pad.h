@@ -26,7 +26,7 @@ void pad_input(float* input, Padding_t padding,
 
 void pad_input(int8_t* input, int8_t zero_point, Padding_t padding, 
                 const uint16_t input_channel_size, const uint16_t input_row_size, const uint16_t input_col_size, 
-                const uint16_t padded_row_size, const uint16_t padded_col_size);
+                const uint16_t padded_row_size, const uint16_t padded_col_size, uint8_t quantize_property);
 
 
 #endif // PAD_H

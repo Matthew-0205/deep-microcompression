@@ -23,7 +23,6 @@
 #define DYNAMIC 1
 #define STATIC 2
 
-#if !defined(QUANTIZATION_SCHEME) || QUANTIZATION_SCHEME != STATIC
 
 /**
  * @brief Sequential container for floating-point neural network layers
@@ -57,13 +56,9 @@ public:
 };
 
 
-
-#else // QUANTIZATION_SCHEME
-
-
-class Sequential {
+class Sequential_SQ {
 private:
-    Layer** layers;                  ///< Array of layer pointers
+    Layer_SQ** layers;                  ///< Array of layer pointers
     uint8_t layers_len;             ///< Number of layers in the model
     uint32_t workspace_size;        ///< Size of the pre-allocated memory
 
@@ -77,7 +72,7 @@ public:
      * @param workspace Pre-allocated workspace memory
      * @param workspace_size Size of the pre-allocated workspace memory
      */
-    Sequential(Layer** layers, uint8_t layers_len, int8_t* workspace, uint32_t workspace_size);
+    Sequential_SQ(Layer_SQ** layers, uint8_t layers_len, int8_t* workspace, uint32_t workspace_size);
     /**
      * @brief Executes forward pass through all quantized layers
      * 
@@ -85,8 +80,5 @@ public:
      */
     int8_t* predict(void);
 };
-
-#endif // QUANTIZATION_SCHEME
-
 
 #endif // SEQUENTIAL_H
