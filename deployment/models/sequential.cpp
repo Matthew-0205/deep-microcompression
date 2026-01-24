@@ -35,28 +35,48 @@ Sequential::Sequential(Layer **layers, uint8_t layers_len, float *workspace, uin
  * - Even layers write to odd workspace
  * - Odd layers write to even workspace
  */
-float* Sequential::predict(void) {
+void Sequential::predict(void) {
     float* current_input = this->input;
 
     for (uint8_t i = 0; i < this->layers_len; i++) {
         current_input = this->layers[i]->forward(current_input, this->input, workspace_size);
     }
-    return current_input;
+    this->output = current_input;
 }
 
+float Sequential::get_output(uint32_t index) {
+    return activation_read_float(this->output, index);
+}
 
-Sequential_SQ::Sequential_SQ(Layer_SQ **layers, uint8_t layers_len, int8_t *workspace, uint32_t workspace_size) {
+void Sequential::set_input(uint32_t index, float value) {
+    activation_write_float(this->input, index, value);
+}
+
+Sequential_SQ::Sequential_SQ(Layer_SQ **layers, uint8_t layers_len, int8_t *workspace, uint32_t workspace_size, uint8_t quantize_property) {
     this->layers = layers;
     this->layers_len = layers_len;
     this->input = workspace;
     this->workspace_size = workspace_size;
+    this->quantize_property = quantize_property;
 }
 
-int8_t* Sequential_SQ::predict(void) {
+void Sequential_SQ::predict(void) {
     int8_t* current_input = this->input;
 
     for (uint8_t i = 0; i < this->layers_len; i++) {
         current_input = this->layers[i]->forward(current_input, this->input, workspace_size);
     }
-    return current_input;
+    this->output = current_input;
+}
+
+int8_t Sequential_SQ::get_output(uint32_t index) {
+    int8_t (*activation_read_packed_intb) (int8_t*, uint32_t);
+    get_activation_read_packed_intb(this->quantize_property, &activation_read_packed_intb);
+    return activation_read_packed_intb(this->output, index);
+}
+
+void Sequential_SQ::set_input(uint32_t index, int8_t value) {
+    void (*activation_write_packed_intb) (int8_t*, uint32_t, int8_t);
+    get_activation_write_packed_intb(this->quantize_property, &activation_write_packed_intb);
+    activation_write_packed_intb(this->input, index, value);
 }
