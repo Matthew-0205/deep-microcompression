@@ -13,6 +13,7 @@ __all__ = [
     "Conv2d"
 ]
 
+import math
 from typing import Optional, Tuple, Union
 
 import torch
@@ -124,8 +125,9 @@ class Conv2d(Layer, nn.Conv2d):
     def init_prune_channel(
         self, 
         sparsity: float, 
-        keep_prev_channel_index: Optional[torch.Tensor], 
         input_shape: torch.Size,
+        keep_prev_channel_index:Optional[torch.Tensor], 
+        keep_current_channel_index:Optional[torch.Tensor],
         is_output_layer: bool = False, 
         metric: str = "l2"
     ):
@@ -167,25 +169,30 @@ class Conv2d(Layer, nn.Conv2d):
 
         if keep_prev_channel_index is None:
             keep_prev_channel_index = torch.arange(self.in_channels)
-        if self.groups == self.out_channels:
+
+        # For depthwise convolution, the second dimension is 1 as all
+        # filters match with the input channel
+        if self.groups == self.in_channels:
 
             keep_prev_channel_index_temp = keep_prev_channel_index
             keep_prev_channel_index = torch.arange(1)
 
-            if is_output_layer:
-                keep_current_channel_index = torch.arange(self.out_channels)
-            else:
-                keep_current_channel_index = keep_prev_channel_index_temp
+            if keep_current_channel_index is None:
+                if is_output_layer:
+                    keep_current_channel_index = torch.arange(self.out_channels)
+                else:
+                    keep_current_channel_index = keep_prev_channel_index_temp
         else:
+            if keep_current_channel_index is None:
 
-            if is_output_layer:
-                keep_current_channel_index = torch.arange(self.out_channels)
+                if is_output_layer:
+                    keep_current_channel_index = torch.arange(self.out_channels)
 
-            else:
-                # Select top-k neurons to keep
-                importance = self.weight.pow(2) if metric == "l2" else self.weight.abs()
-                channel_importance = importance.sum(dim=[1, 2, 3])
-                keep_current_channel_index = torch.sort(torch.topk(channel_importance, density, dim=0).indices).values
+                else:
+                    # Select top-k neurons to keep
+                    importance = self.weight.pow(2) if metric == "l2" else self.weight.abs()
+                    channel_importance = importance.sum(dim=[1, 2, 3])
+                    keep_current_channel_index = torch.sort(torch.topk(channel_importance, density, dim=0).indices).values
                 
         # Store Indices
         keep_prev_channel_index = keep_prev_channel_index.to(self.weight.device)
@@ -216,7 +223,8 @@ class Conv2d(Layer, nn.Conv2d):
         granularity: QuantizationGranularity, 
         scheme: QuantizationScheme,
         activation_bitwidth:Optional[int]=None,
-        previous_output_quantize: Optional[Quantize] = None
+        previous_output_quantize: Optional[Quantize] = None,
+        current_output_quantize: Optional[Quantize] = None,
     ):
         """
         Sets up Quantization Observers.
@@ -227,7 +235,6 @@ class Conv2d(Layer, nn.Conv2d):
         3. Bias: 32-bit Symmetric, scaled by (Input_Scale * Weight_Scale).
         """
         super().init_quantize(parameter_bitwidth, granularity, scheme, activation_bitwidth, previous_output_quantize)
-
         # Weight Quantizer
         if not self.is_pruned_channel:
             setattr(self, "weight_quantize", Quantize(
@@ -245,10 +252,16 @@ class Conv2d(Layer, nn.Conv2d):
             setattr(self, "input_quantize", Quantize(
                 self, activation_bitwidth, scheme, QuantizationGranularity.PER_TENSOR, scale_type=QuantizationScaleType.ASSYMMETRIC, base=[previous_output_quantize]
             ))
-            setattr(self, "output_quantize", Quantize(
-                self, activation_bitwidth, scheme, QuantizationGranularity.PER_TENSOR, scale_type=QuantizationScaleType.ASSYMMETRIC
-            ))
- 
+            # Fixing the output quantizer to be that passed,likely due to it being in a branch layer
+            if current_output_quantize is None:
+                setattr(self, "output_quantize", Quantize(
+                    self, activation_bitwidth, scheme, QuantizationGranularity.PER_TENSOR, scale_type=QuantizationScaleType.ASSYMMETRIC
+                ))
+            else:
+                setattr(self, "output_quantize", Quantize(
+                    self, activation_bitwidth, scheme, QuantizationGranularity.PER_TENSOR, scale_type=QuantizationScaleType.ASSYMMETRIC, base=[current_output_quantize]
+                ))
+
         # Bias Quantizer
         if self.bias is not None:
             if not self.is_pruned_channel:
@@ -334,7 +347,12 @@ class Conv2d(Layer, nn.Conv2d):
         return weight, bias
     
 
-    def get_output_tensor_shape(self, input_shape) -> tuple[torch.Size, torch.Size]:
+    def get_workspace_size(self, input_shape, data_per_byte) -> int:
+        return math.ceil(input_shape.numel() / data_per_byte)\
+            + math.ceil(self.get_output_tensor_shape(input_shape).numel() / data_per_byte)
+
+
+    def get_output_tensor_shape(self, input_shape) -> torch.Size:
         """Calculates output shape for memory planning."""
         C_in, H_in, W_in = input_shape
         
@@ -351,7 +369,7 @@ class Conv2d(Layer, nn.Conv2d):
         H_out = ((H_in +  pH - dH * (kH - 1) - 1) // sH) + 1
         W_out = ((W_in +  pW - dW * (kW - 1) - 1) // sW) + 1
         
-        return torch.Size((C_in, H_in +  pH, W_in +  pW)), torch.Size((C_out, H_out, W_out))
+        return torch.Size((C_out, H_out, W_out))
     
 
     @torch.no_grad()
@@ -379,7 +397,9 @@ class Conv2d(Layer, nn.Conv2d):
         kernel_row_size, kernel_col_size = weight.size()
         stride_row, stride_col = self.stride
 
-        if self.groups == self.out_channels:
+        # For dephtwise convolution, so the groups matchs with the input 
+        # channel in a case where some layers are pruned off.
+        if self.groups == self.in_channels:
             groups = input_channel_size
         else:
             groups = self.groups
@@ -475,9 +495,10 @@ class Conv2d(Layer, nn.Conv2d):
                 
                 
             param_header, param_def = convert_tensor_to_bytes_var(
-                                        self.weight_quantize.scale,
-                                        f"{var_name}_weight_scale"
-                                    )
+                self.weight_quantize.scale,
+                f"{var_name}_weight_scale",
+                for_arduino=for_arduino
+            )
             layer_header += param_header
             layer_param_def += param_def
 
@@ -567,7 +588,8 @@ class Conv2d(Layer, nn.Conv2d):
                 bias_scale = self.input_quantize.scale * self.weight_quantize.scale
             param_header, param_def = convert_tensor_to_bytes_var(
                 bias_scale,
-                f"{var_name}_bias_scale"
+                f"{var_name}_bias_scale",
+                for_arduino=for_arduino
             )
             layer_header += param_header
             layer_param_def += param_def

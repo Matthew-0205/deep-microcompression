@@ -18,13 +18,15 @@ In the Deep Microcompression framework, pooling layers play a passive but critic
     re-quantization support (not implemented here, assumed fused or float fallback).
 """
 
-from typing import Union
+import math
+import warnings
+from typing import Union, Optional
 
 import torch
 from torch import nn
 
 from .layer import Layer
-from ..compressors import QuantizationScheme
+from ..compressors import Quantize, QuantizationScheme
 from ..utils import (
     ACTIVATION_BITWIDTH_8,
     ACTIVATION_BITWIDTH_4,
@@ -57,30 +59,46 @@ class MaxPool2d(Layer, nn.MaxPool2d):
     def init_prune_channel(
         self, 
         sparsity: float, 
-        keep_prev_channel_index: Union[torch.Tensor, None], 
         input_shape: torch.Size,
+        keep_prev_channel_index:Optional[torch.Tensor], 
+        keep_current_channel_index:Optional[torch.Tensor],
         is_output_layer: bool = False, 
         metric: str = "l2"
-    ):
+    ) -> Optional[torch.Tensor]:
         """Placeholder for channel pruning (MaxPool doesn't have weights to prune)"""
-        return keep_prev_channel_index
+        if keep_current_channel_index is None:
+            return keep_prev_channel_index
+        return keep_current_channel_index
 
 
     def get_prune_channel_possible_hyperparameters(self):
         return None
 
 
-    def init_quantize(self, parameter_bitwidth, granularity, scheme, activation_bitwidth=None, previous_output_quantize = None):
+
+    def init_quantize(
+        self, 
+        parameter_bitwidth, 
+        granularity, scheme, 
+        activation_bitwidth=None, 
+        previous_output_quantize = None,
+        current_output_quantize: Optional[Quantize] = None,
+    ):
         """
         Pass-through for Quantization Observers.
         
         Max Pooling does not alter the dynamic range of data, so the 
         input scale/zero-point is valid for the output.
         """
-        
         super().init_quantize(parameter_bitwidth, granularity, scheme, activation_bitwidth, previous_output_quantize)
+        if current_output_quantize is None:
+            return previous_output_quantize
+        warnings.warn(
+            (f"{self} recieved a curent_output_quantize, this forces it to use that as the quantization base and not the previous"
+            " layer's quantizer, this is likely to using it in a branch with a modifying layer, Linear or Conv.")
+        )
+        return current_output_quantize
 
-        return previous_output_quantize
 
 
     def get_quantize_possible_hyperparameters(self):
@@ -95,6 +113,11 @@ class MaxPool2d(Layer, nn.MaxPool2d):
         #Nothing to do
         pass
 
+
+    def get_workspace_size(self, input_shape, data_per_byte) -> int:
+        return math.ceil(input_shape.numel() / data_per_byte)\
+            + math.ceil(self.get_output_tensor_shape(input_shape).numel() / data_per_byte)
+    
 
     def get_output_tensor_shape(self, input_shape):
         """
@@ -114,7 +137,7 @@ class MaxPool2d(Layer, nn.MaxPool2d):
         H_out = ((H_in + 2 * pH - kH) // sH) + 1
         W_out = ((W_in + 2 * pW - kW) // sW) + 1
         
-        return torch.Size((C, H_out, W_out)), torch.Size((C, H_out, W_out))
+        return torch.Size((C, H_out, W_out))
     
 
     @torch.no_grad()
@@ -204,25 +227,46 @@ class AvgPool2d(Layer, nn.AvgPool2d):
     def init_prune_channel(
         self, 
         sparsity: float, 
-        keep_prev_channel_index: Union[torch.Tensor, None], 
         input_shape: torch.Size,
+        keep_prev_channel_index:Optional[torch.Tensor], 
+        keep_current_channel_index:Optional[torch.Tensor],
         is_output_layer: bool = False, 
         metric: str = "l2"
-    ):
+    ) -> Optional[torch.Tensor]:
+        
         """Placeholder for channel pruning (MaxPool doesn't have weights to prune)"""
         # Nothing to do
-        return keep_prev_channel_index
+        if keep_current_channel_index is None:
+            return keep_prev_channel_index
+        return keep_current_channel_index
 
 
     def get_quantize_possible_hyperparameters(self):
         return None
     
 
-    def init_quantize(self, parameter_bitwidth, granularity, scheme, activation_bitwidth=None, previous_output_quantize = None):
-        """Pass-through for quantization observers."""
-
+    def init_quantize(
+        self, 
+        parameter_bitwidth, 
+        granularity, scheme, 
+        activation_bitwidth=None, 
+        previous_output_quantize = None,
+        current_output_quantize: Optional[Quantize] = None,
+    ):
+        """
+        Pass-through for Quantization Observers.
+        
+        Avg Pooling does not alter the dynamic range of data, so the 
+        input scale/zero-point is valid for the output.
+        """
         super().init_quantize(parameter_bitwidth, granularity, scheme, activation_bitwidth, previous_output_quantize)
-        return previous_output_quantize
+        if current_output_quantize is None:
+            return previous_output_quantize
+        warnings.warn(
+            (f"{self} recieved a curent_output_quantize, this forces it to use that as the quantization base and not the previous"
+            " layer's quantizer, this is likely to using it in a branch with a modifying layer, Linear or Conv.")
+        )
+        return current_output_quantize
 
 
     def get_prune_channel_possible_hyperparameters(self):
@@ -237,6 +281,10 @@ class AvgPool2d(Layer, nn.AvgPool2d):
         #Nothing to do
         pass
 
+
+    def get_workspace_size(self, input_shape, data_per_byte) -> int:
+        return math.ceil(input_shape.numel() / data_per_byte)\
+            + math.ceil(self.get_output_tensor_shape(input_shape).numel() / data_per_byte)
 
     def get_output_tensor_shape(self, input_shape):
         
@@ -253,7 +301,7 @@ class AvgPool2d(Layer, nn.AvgPool2d):
         H_out = ((H_in + 2 * pH - kH) // sH) + 1
         W_out = ((W_in + 2 * pW - kW) // sW) + 1
 
-        return torch.Size((C, H_out, W_out)), torch.Size((C, H_out, W_out))
+        return torch.Size((C, H_out, W_out))
     
 
     @torch.no_grad()

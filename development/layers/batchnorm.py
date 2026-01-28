@@ -7,19 +7,19 @@ For the final bare-metal deployment, they are typically folded into the
 preceding Conv2d layer (see `fuse.py`) to enable Static Quantization .
 """
 
+import math
 from typing import Optional
 
 import torch
 from torch import nn
 
 from .layer import Layer
-from ..compressors import Prune_Channel
+from ..compressors import Prune_Channel, Quantize
 
 from ..utils import (
     convert_tensor_to_bytes_var,
     get_size_in_bits,
 )
-from ..compressors import QuantizationScheme
 
 class BatchNorm2d(Layer, nn.BatchNorm2d):
     """
@@ -33,6 +33,12 @@ class BatchNorm2d(Layer, nn.BatchNorm2d):
 
     
     def forward(self, input):
+        with torch.no_grad():
+            if self.is_pruned_channel and self.affine:
+                
+                self.weight.data = self.prune_channel(self.weight)
+                self.bias.data = self.prune_channel(self.bias)
+                    
         return super().forward(input)
     
     # integer requirement, BN is mathematically folded into Conv weights.
@@ -62,8 +68,9 @@ class BatchNorm2d(Layer, nn.BatchNorm2d):
     def init_prune_channel(
         self, 
         sparsity: float, 
-        keep_prev_channel_index: Optional[torch.Tensor], 
         input_shape: torch.Size,
+        keep_prev_channel_index:Optional[torch.Tensor], 
+        keep_current_channel_index:Optional[torch.Tensor],
         is_output_layer: bool = False, 
         metric: str = "l2"
     ):
@@ -77,10 +84,16 @@ class BatchNorm2d(Layer, nn.BatchNorm2d):
         """
         # BatchNorm doesn't reduce channels itself; it just mirrors the input.
         # So it passes the 'keep' indices forward unchanged.
+        if keep_current_channel_index is None:
+            setattr(self, "prune_channel", Prune_Channel(
+                layer=self, keep_current_channel_index=keep_prev_channel_index
+            ))
+            return keep_prev_channel_index
+        
         setattr(self, "prune_channel", Prune_Channel(
-            layer=self, keep_current_channel_index=keep_prev_channel_index
+            layer=self, keep_current_channel_index=keep_current_channel_index
         ))
-        return keep_prev_channel_index
+        return keep_current_channel_index
     
 
     def get_prune_channel_possible_hyperparameters(self):
@@ -88,7 +101,14 @@ class BatchNorm2d(Layer, nn.BatchNorm2d):
 
 
     @torch.no_grad()
-    def init_quantize(self, parameter_bitwidth, granularity, scheme, activation_bitwidth=None, previous_output_quantize = None):
+    def init_quantize(
+        self, 
+        parameter_bitwidth, 
+        granularity, scheme, 
+        activation_bitwidth=None, 
+        previous_output_quantize = None,
+        current_output_quantize: Optional[Quantize] = None,
+    ):         
         """
         Configures quantization.
         
@@ -132,10 +152,16 @@ class BatchNorm2d(Layer, nn.BatchNorm2d):
                 folded_bias = self.prune_channel.apply(folded_bias)
 
         return folded_weight, folded_bias
+    
+
+    def get_workspace_size(self, input_shape, data_per_byte) -> int:
+        return math.ceil(input_shape.numel() / data_per_byte)\
+            + math.ceil(self.get_output_tensor_shape(input_shape).numel() / data_per_byte)
+
 
     def get_output_tensor_shape(self, input_shape):
         # Nothing to do
-        return input_shape, input_shape
+        return input_shape
 
     
     @torch.no_grad()

@@ -35,8 +35,9 @@ class Layer(ABC):
     def init_prune_channel(
         self, 
         sparsity: float, 
-        keep_prev_channel_index: Optional[torch.Tensor], 
         input_shape: torch.Size,
+        keep_prev_channel_index: Optional[torch.Tensor], 
+        keep_current_channel_index:Optional[torch.Tensor],
         is_output_layer: bool = False, 
         metric: str = "l2"
     ) -> Optional[torch.Tensor]:
@@ -62,11 +63,11 @@ class Layer(ABC):
     @abstractmethod
     def init_quantize(
         self, 
-        parameter_bitwidth: int, 
-        granularity: QuantizationGranularity, 
-        scheme: QuantizationScheme,
-        activation_bitwidth:Optional[int]=None,
-        previous_output_quantize: Optional[Quantize] = None
+        parameter_bitwidth, 
+        granularity, scheme, 
+        activation_bitwidth=None, 
+        previous_output_quantize = None,
+        current_output_quantize: Optional[Quantize] = None,
     ):
         """
         Quantization Setup.
@@ -103,6 +104,9 @@ class Layer(ABC):
         """
         pass
 
+    @abstractmethod
+    def get_workspace_size(self, input_shape, data_per_byte) -> int:
+        return 0
 
     @abstractmethod
     def get_size_in_bits(self) -> int:

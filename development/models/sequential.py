@@ -32,10 +32,14 @@ from torch.utils import data
 
 # DMC Framework Imports
 from ..layers.layer import Layer
-from ..layers.conv import Conv2d
-from ..layers.linear import Linear
-from ..layers.batchnorm import BatchNorm2d
 from ..layers.activation import ReLU, ReLU6
+from ..layers.batchnorm import BatchNorm2d
+from ..layers.conv import Conv2d
+from ..layers.flatten import Flatten
+from ..layers.linear import Linear
+from ..layers.padding import ConstantPad2d
+from ..layers.pooling import AvgPool2d, MaxPool2d
+
 
 from ..compressors import (
     Quantize,
@@ -167,11 +171,7 @@ class Sequential(nn.Sequential):
     @property
     def is_compressed(self) -> bool:
         """
-        Indicates if the model has entered the optimization pipeline.
-        
-        Returns True if:
-        - Stage 1: Structured Pruning is active (`is_pruned_channel`)
-        - Stage 2: Quantization is active (`is_quantized`)
+        Indicates if the model has entered the compressed pipeline.
         """
         return self.is_pruned_channel or self.is_quantized
 
@@ -228,7 +228,6 @@ class Sequential(nn.Sequential):
             # If is_quantized=True, individual layers (Conv2d, Linear) execute 
             # their own fake-quantization logic (Weight/Activation quantization)
             input = layer(input)
-                
         return input
 
 
@@ -637,16 +636,15 @@ class Sequential(nn.Sequential):
         for name, layer in list(self.names_layers())[:-1]:
 
             keep_prev_channel_index = layer.init_prune_channel(
-                sparsity[name], keep_prev_channel_index, input_shape,
+                sparsity[name], input_shape, keep_prev_channel_index, keep_current_channel_index=None,
                 is_output_layer=False, metric=metric
             )
-            _, input_shape = layer.get_output_tensor_shape(torch.Size(input_shape))
-
+            input_shape = layer.get_output_tensor_shape(torch.Size(input_shape))
 
         # Prune last layer
         name, layer = list(self.names_layers())[-1]
         keep_prev_channel_index = layer.init_prune_channel(
-            sparsity[name], keep_prev_channel_index, input_shape,
+            sparsity[name], input_shape, keep_prev_channel_index,keep_current_channel_index=None,
             is_output_layer=True, metric=metric
         )
         return 
@@ -697,7 +695,7 @@ class Sequential(nn.Sequential):
         return quantize_possible_hypermeters
 
 
-    def get_commpression_possible_hyperparameters(self, scheme:QuantizationScheme=QuantizationScheme.STATIC) -> Dict[str, Iterable]:
+    def get_compression_possible_hyperparameters(self, scheme:QuantizationScheme=QuantizationScheme.STATIC) -> Dict[str, Iterable]:
         """
         Defines the valid search space for Compression.
         
@@ -716,6 +714,24 @@ class Sequential(nn.Sequential):
             compression_hp[f"quantize.{name}"] = hp
 
         return compression_hp
+    
+    def get_compression_possible_hyperparameters_size(self, scheme:QuantizationScheme=QuantizationScheme.STATIC) -> int:
+            return math.prod(len(hyperparameters) for hyperparameters in self.get_compression_possible_hyperparameters(scheme).values())
+    
+
+    def get_compression_possible_hyperparameters_size_with_filter(self, scheme, filter):
+        possible_configs = self.get_compression_possible_hyperparameters(scheme)
+        config_keys = possible_configs.keys()
+        config_values = possible_configs.values()
+        
+        count = 0
+        for config in itertools.product(*config_values):
+            config_dict = dict(zip(config_keys, config))
+            
+            if filter(config_dict):
+                count += 1
+        return count
+
 
     def decode_compression_dict_hyperparameter(self, compression_dict: Dict[str, Any]) -> Dict[str, Iterable]:
         """
@@ -778,7 +794,11 @@ class Sequential(nn.Sequential):
             ))
             previous_output_quantize = self.input_quantize
             for name, layer in self.names_layers():
-                previous_output_quantize = layer.init_quantize(parameter_bitwidth[name], granularity[name], scheme, activation_bitwidth, previous_output_quantize)
+                previous_output_quantize = layer.init_quantize(
+                    parameter_bitwidth[name], granularity[name], 
+                    scheme, activation_bitwidth, previous_output_quantize, 
+                    current_output_quantize=None
+                )
 
             # We run a forward pass with calibration data to let the observers
             self.train() # Ensure observers are updating
@@ -788,7 +808,6 @@ class Sequential(nn.Sequential):
                 self(calibration_data)
 
         return
-
 
 
     def fuse(self, batchnorm_only:bool=False, device:Optional[str]=None) -> "Sequential":
@@ -883,7 +902,7 @@ class Sequential(nn.Sequential):
 
 
 
-    def get_min_workspace_arena(self, input_shape:Tuple) -> int:
+    def get_workspace_size(self, input_shape:Tuple) -> int:
         """
         Calculates the minimum SRAM (Static RAM) required for inference.
 
@@ -920,13 +939,11 @@ class Sequential(nn.Sequential):
 
         output_shape = input_shape
         # Track maximum tensor sizes at even/odd layers
-        for i, layer in enumerate(self.layers()):
-            max_layer_shape, output_shape = layer.get_output_tensor_shape(torch.Size(output_shape))
+        for layer in self.layers():
+            layer_workspace_size = layer.get_workspace_size(torch.Size(output_shape), data_per_byte)
+            output_shape = layer.get_output_tensor_shape(torch.Size(output_shape))
             # Calculate bytes required (applying packing factor)
-            output_size = math.ceil(output_shape.numel() / data_per_byte)
-            max_layer_size = math.ceil(max_layer_shape.numel() / data_per_byte)
-
-            max_layer_acitivation_workspace_size = max(max_layer_acitivation_workspace_size, output_size + max_layer_size)
+            max_layer_acitivation_workspace_size = max(max_layer_acitivation_workspace_size, layer_workspace_size)
         
         return max_layer_acitivation_workspace_size
 
@@ -982,8 +999,9 @@ class Sequential(nn.Sequential):
         definition_file = f"#include \"{var_name}.h\"\n\n"
         param_definition_file = f"#include \"{var_name}.h\"\n\n"
     
+        input_shape = torch.Size(input_shape)
         # Calculate workspace requirements
-        max_layer_acitivation_workspace_size = self.get_min_workspace_arena(input_shape)
+        max_layer_acitivation_workspace_size = self.get_workspace_size(torch.Size(input_shape))
         # max_output_even_size, max_output_odd_size = self.get_max_workspace_arena(input_shape)
         
         scheme = None
@@ -1004,7 +1022,7 @@ class Sequential(nn.Sequential):
                 f"extern Sequential {var_name};\n\n"
             )
             layers_def = (
-                f"{self.__class__.__name__} {var_name}(layers, LAYERS_LEN, workspace, WORKSPACE_SIZE);\n"
+                f"\n{self.__class__.__name__} {var_name}(layers, LAYERS_LEN, workspace, WORKSPACE_SIZE);"
                 f"\nLayer* layers[LAYERS_LEN] = {{\n"
             )
         
@@ -1037,8 +1055,7 @@ class Sequential(nn.Sequential):
             layers_def = (
                 f"{self.__class__.__name__}_SQ {var_name}(layers, LAYERS_LEN, workspace, WORKSPACE_SIZE, {quantize_property});\n"
                 f"\nLayer_SQ* layers[LAYERS_LEN] = {{\n"
-            )
-            
+            )    
 
         header_file += workspace_header
         definition_file += workspace_def
@@ -1054,7 +1071,7 @@ class Sequential(nn.Sequential):
             param_definition_file += layer_param_def
             definition_file += layer_def 
 
-            _, input_shape = layer.get_output_tensor_shape(torch.Size(input_shape))  
+            input_shape = layer.get_output_tensor_shape(torch.Size(input_shape))  
         
         layers_def += "};\n"
         definition_file += layers_def
@@ -1068,7 +1085,6 @@ class Sequential(nn.Sequential):
 
 
         if test_input is not None:
-
             if self.is_quantized and self.__dict__["_dmc"]["compression_config"]["quantize"]["scheme"] == QuantizationScheme.STATIC:
                 _, test_input_def = convert_tensor_to_bytes_var(
                     self.input_quantize.apply(test_input), 
@@ -1083,7 +1099,8 @@ class Sequential(nn.Sequential):
                 #     ) + ",\n"
                 # test_input_def += "};\n"
             else:
-                    _, test_input_def = convert_tensor_to_bytes_var(test_input, "test_input",)
+                    _, test_input_def = convert_tensor_to_bytes_var(test_input, "test_input",
+                for_arduino=for_arduino)
                     if not for_arduino:
                         test_input_def = f"\nconst float test_input[] = {{\n"
                     else:

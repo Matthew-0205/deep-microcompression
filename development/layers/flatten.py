@@ -12,12 +12,14 @@
     knows which input connections to remove.
 """
 
-from typing import Union
+import math
+import warnings
+from typing import Optional
 import torch
 from torch import nn
 
 from .layer import Layer
-from ..compressors import QuantizationScheme
+from ..compressors import Quantize, QuantizationScheme
 
 from ..utils import (
     ACTIVATION_BITWIDTH_8,
@@ -51,8 +53,9 @@ class Flatten(Layer, nn.Flatten):
     def init_prune_channel(
         self, 
         sparsity: float, 
-        keep_prev_channel_index: Union[torch.Tensor, None], 
         input_shape: torch.Size,
+        keep_prev_channel_index:Optional[torch.Tensor], 
+        keep_current_channel_index:Optional[torch.Tensor],
         is_output_layer: bool = False, 
         metric: str = "l2"
     ):
@@ -69,27 +72,35 @@ class Flatten(Layer, nn.Flatten):
         """
         # Calculate number of elements per channel in original input
         channel_numel = input_shape[1:].numel()
+        if keep_current_channel_index is None:
+            if is_output_layer:
+                pass
+                # Output layer doesn't prune, just pass through
 
-        if is_output_layer:
-            pass
-            # Output layer doesn't prune, just pass through
+            # Calculate start positions for each kept channel
+            if keep_prev_channel_index is None:
+                keep_prev_channel_index = torch.arange(input_shape[0])
+            start_positions = keep_prev_channel_index * channel_numel
+            channel_elements_index = torch.arange(channel_numel).to(start_positions.device)
 
-        # Calculate start positions for each kept channel
-        if keep_prev_channel_index is None:
-            keep_prev_channel_index = torch.arange(input_shape[0])
-        start_positions = keep_prev_channel_index * channel_numel
-        channel_elements_index = torch.arange(channel_numel).to(start_positions.device)
+            # Generate indices for all elements in kept channels
+            keep_current_channel_index = start_positions.view(-1, 1) + channel_elements_index
 
-        # Generate indices for all elements in kept channels
-        keep_current_channel_index = start_positions.view(-1, 1) + channel_elements_index
-
-        return keep_current_channel_index.flatten()
+            return keep_current_channel_index.flatten()
+        return keep_current_channel_index
     
 
     def get_prune_channel_possible_hyperparameters(self):
         return None
     
-    def init_quantize(self, parameter_bitwidth, granularity, scheme, activation_bitwidth=None, previous_output_quantize = None):
+    def init_quantize(
+        self, 
+        parameter_bitwidth, 
+        granularity, scheme, 
+        activation_bitwidth=None, 
+        previous_output_quantize = None,
+        current_output_quantize: Optional[Quantize] = None,
+    ):
         """
         Pass-through for quantization observers.
         
@@ -97,8 +108,13 @@ class Flatten(Layer, nn.Flatten):
         is identical to the output scale/zero-point.
         """
         super().init_quantize(parameter_bitwidth, granularity, scheme, activation_bitwidth, previous_output_quantize)
-
-        return previous_output_quantize
+        if current_output_quantize is None:
+            return previous_output_quantize
+        warnings.warn(
+            (f"{self} recieved a curent_output_quantize, this forces it to use that as the quantization base and not the previous"
+            " layer's quantizer, this is likely to using it in a branch with a modifying layer, Linear or Conv.")
+        )
+        return current_output_quantize
 
 
     def get_quantize_possible_hyperparameters(self):
@@ -113,9 +129,13 @@ class Flatten(Layer, nn.Flatten):
         pass
 
 
+    def get_workspace_size(self, input_shape, data_per_byte) -> int:
+        return math.ceil(input_shape.numel() / data_per_byte)\
+            + math.ceil(self.get_output_tensor_shape(input_shape).numel() / data_per_byte)
+
     def get_output_tensor_shape(self, input_shape: torch.Size):
         """Calculates flattened output shape."""
-        return torch.Size((input_shape.numel(),)), torch.Size((input_shape.numel(),))
+        return torch.Size((input_shape.numel(),))
     
 
     @torch.no_grad()

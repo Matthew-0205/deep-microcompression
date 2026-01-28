@@ -12,6 +12,7 @@ __all__ = [
     "Linear"
 ]
 
+import math
 from typing import Optional, Tuple, Union
 from functools import partial
 
@@ -100,13 +101,14 @@ class Linear(Layer, nn.Linear):
 
     @torch.no_grad()
     def init_prune_channel(
-            self, 
-            sparsity: Union[float, int], 
-            keep_prev_channel_index: Optional[torch.Tensor], 
-            input_shape: torch.Size,
-            is_output_layer: bool = False, 
-            metric: str = "l2"
-        ) -> Optional[torch.Tensor]:
+        self, 
+        sparsity: float, 
+        input_shape: torch.Size,
+        keep_prev_channel_index:Optional[torch.Tensor], 
+        keep_current_channel_index:Optional[torch.Tensor],
+        is_output_layer: bool = False, 
+        metric: str = "l2"
+    ) -> Optional[torch.Tensor]:
         """
         Executes Structured Pruning logic (Section III-A).
         
@@ -142,15 +144,16 @@ class Linear(Layer, nn.Linear):
         if keep_prev_channel_index is None:
             keep_prev_channel_index = torch.arange(self.in_features)
 
-        if is_output_layer:
-            # Skip pruning for output layer
-            keep_current_channel_index = torch.arange(self.out_features)
-        else:
+        if keep_current_channel_index is None:
+            if is_output_layer:
+                # Skip pruning for output layer
+                keep_current_channel_index = torch.arange(self.out_features)
+            else:
 
-            # Calculate channel importance
-            importance = self.weight.pow(2) if metric == "l2" else self.weight.abs()
-            channel_importance = importance.sum(dim=[1])
-            keep_current_channel_index = torch.sort(torch.topk(channel_importance, density, dim=0).indices).values
+                # Calculate channel importance
+                importance = self.weight.pow(2) if metric == "l2" else self.weight.abs()
+                channel_importance = importance.sum(dim=[1])
+                keep_current_channel_index = torch.sort(torch.topk(channel_importance, density, dim=0).indices).values
                
         # Store Indices
         keep_prev_channel_index = keep_prev_channel_index.to(self.weight.device)
@@ -181,7 +184,8 @@ class Linear(Layer, nn.Linear):
         granularity: QuantizationGranularity, 
         scheme: QuantizationScheme,
         activation_bitwidth:Optional[int]=None,
-        previous_output_quantize: Optional[Quantize] = None
+        previous_output_quantize: Optional[Quantize] = None,
+        current_output_quantize: Optional[Quantize] = None,
     ):
         """
         Sets up Quantization Observers.
@@ -211,9 +215,16 @@ class Linear(Layer, nn.Linear):
             setattr(self, "input_quantize", Quantize(
                 self, activation_bitwidth, scheme, QuantizationGranularity.PER_TENSOR, scale_type=QuantizationScaleType.ASSYMMETRIC, base=[previous_output_quantize]
             ))
-            setattr(self, "output_quantize", Quantize(
-                self, activation_bitwidth, scheme, QuantizationGranularity.PER_TENSOR, scale_type=QuantizationScaleType.ASSYMMETRIC
-            ))
+    
+            # Fixing the output quantizer to be that passed,likely due to it being in a branch layer
+            if current_output_quantize is None:
+                setattr(self, "output_quantize", Quantize(
+                    self, activation_bitwidth, scheme, QuantizationGranularity.PER_TENSOR, scale_type=QuantizationScaleType.ASSYMMETRIC
+                ))
+            else:
+                setattr(self, "output_quantize", Quantize(
+                    self, activation_bitwidth, scheme, QuantizationGranularity.PER_TENSOR, scale_type=QuantizationScaleType.ASSYMMETRIC, base=[current_output_quantize]
+                ))
 
         # Bias Quantizer
         if self.bias is not None:
@@ -306,10 +317,14 @@ class Linear(Layer, nn.Linear):
         return weight, bias
 
 
-    def get_output_tensor_shape(self, input_shape) -> tuple[torch.Size, torch.Size]:
+    def get_workspace_size(self, input_shape, data_per_byte) -> int:
+        return math.ceil(input_shape.numel() / data_per_byte)\
+            + math.ceil(self.get_output_tensor_shape(input_shape).numel() / data_per_byte)
+
+    def get_output_tensor_shape(self, input_shape) -> torch.Size:
         """Calculates output shape for memory planning."""
         out_features, _ = self.get_compression_parameters()[0].size()
-        return torch.Size((out_features,)), torch.Size((out_features,))
+        return torch.Size((out_features,))
     
 
     @torch.no_grad()
@@ -408,9 +423,10 @@ class Linear(Layer, nn.Linear):
             layer_header += f"extern {self.__class__.__name__}_DQ {var_name};\n\n"
 
             param_header, param_def = convert_tensor_to_bytes_var(
-                                        self.weight_quantize.scale,
-                                        f"{var_name}_weight_scale"
-                                    )
+                self.weight_quantize.scale,
+                f"{var_name}_weight_scale",
+                for_arduino=for_arduino
+            )
             layer_header += param_header
             layer_param_def += param_def
             # print("----------->utilis after", layer_param_def)
@@ -494,7 +510,8 @@ class Linear(Layer, nn.Linear):
                 bias_scale = self.input_quantize.scale * self.weight_quantize.scale
             param_header, param_def = convert_tensor_to_bytes_var(
                 bias_scale,
-                f"{var_name}_bias_scale"
+                f"{var_name}_bias_scale",
+                for_arduino=for_arduino
             )
             layer_header += param_header
             layer_param_def += param_def
