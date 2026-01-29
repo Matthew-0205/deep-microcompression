@@ -57,10 +57,6 @@ class Conv2d(Layer, nn.Conv2d):
     
     def __init__(self, *args, **kwargs):
         """Initialize Conv2d layer with standard PyTorch parameters"""
-        # Extract custom padding logic (Left, Right, Top, Bottom)
- 
-        groups = kwargs.get("groups", 1)
-
         # Enforce usage of explicit pad instead of built-in padding arg
         if "padding" in kwargs:
             assert kwargs["padding"] == 0, "Use padding module instead of padding to pad input"
@@ -70,8 +66,8 @@ class Conv2d(Layer, nn.Conv2d):
         super().__init__(*args, **kwargs)
 
         # Constraint: DMC pruning currently supports standard (groups=1) or Depthwise (groups=C)
-        assert groups == 1 or groups == self.out_channels, \
-            "DMC currently supports only Standard (groups=1) or Depthwise (groups=out_channels) convolution."
+        assert not self.is_grouped(), \
+            "DMC currently supports only Standard (groups=1) or Depthwise (in_channels=groups=out_channels) convolution."
         
         
     def forward(self, input:torch.Tensor) -> torch.Tensor:
@@ -121,6 +117,16 @@ class Conv2d(Layer, nn.Conv2d):
         return output
 
 
+    def is_depthwise(self):
+        return self.in_channels == self.groups and self.in_channels == self.out_channels
+
+
+    def is_grouped(self):
+        if self.groups == 1:
+            return False
+        return not self.is_depthwise()
+
+
     @torch.no_grad()
     def init_prune_channel(
         self, 
@@ -152,7 +158,7 @@ class Conv2d(Layer, nn.Conv2d):
             Indices of kept output channels.
         """
         # Validate Grouped Convolution constraints
-        assert(self.groups == 1 or self.groups == self.out_channels), \
+        assert not self.is_grouped(), \
             "Grouped convolution pruning not fully supported."
         
         # Convert sparsity float to integer count
@@ -172,7 +178,7 @@ class Conv2d(Layer, nn.Conv2d):
 
         # For depthwise convolution, the second dimension is 1 as all
         # filters match with the input channel
-        if self.groups == self.in_channels:
+        if self.is_depthwise():
 
             keep_prev_channel_index_temp = keep_prev_channel_index
             keep_prev_channel_index = torch.arange(1)
@@ -211,7 +217,7 @@ class Conv2d(Layer, nn.Conv2d):
 
     def get_prune_channel_possible_hyperparameters(self):
         """Returns valid channel counts for Search Phase."""
-        if self.groups == self.out_channels:
+        if self.is_depthwise():
             return None
         return range(self.out_channels)
 
@@ -399,7 +405,7 @@ class Conv2d(Layer, nn.Conv2d):
 
         # For dephtwise convolution, so the groups matchs with the input 
         # channel in a case where some layers are pruned off.
-        if self.groups == self.in_channels:
+        if self.is_depthwise():
             groups = input_channel_size
         else:
             groups = self.groups
