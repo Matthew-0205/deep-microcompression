@@ -56,8 +56,8 @@ float* ConstantPad2d::forward(float* input, float* workspace_start, uint32_t wor
 
 uint32_t ConstantPad2d::get_output_size(void) {
     return this->input_channel_size * \
-            this->input_row_size + this->padding.padding_top + this->padding.padding_bottom * \
-            this->input_col_size + this->padding.padding_left + this->padding.padding_right;
+            (this->input_row_size + this->padding.padding_top + this->padding.padding_bottom) * \
+            (this->input_col_size + this->padding.padding_left + this->padding.padding_right);
 }
 
 
@@ -126,6 +126,6 @@ int8_t* ConstantPad2d_SQ::forward(int8_t* input, int8_t* workspace_start, uint32
 
 uint32_t ConstantPad2d_SQ::get_output_size(void) {
     return this->input_channel_size * \
-        this->input_row_size + this->padding.padding_top + this->padding.padding_bottom * \
-        this->input_col_size + this->padding.padding_left + this->padding.padding_right;
+        (this->input_row_size + this->padding.padding_top + this->padding.padding_bottom) * \
+        (this->input_col_size + this->padding.padding_left + this->padding.padding_right);
 }
