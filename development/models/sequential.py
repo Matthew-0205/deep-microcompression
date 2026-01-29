@@ -443,12 +443,18 @@ class Sequential(nn.Sequential):
 
                     def prune_channel_layer(layer): layer.is_pruned_channel = True
 
-                    model.init_prune_channel(force_prune_channel=force_prune_channel)
+                    # To prevent weight reselection especially in case of two step training
+                    # since the weight are not modified in place when pruning is done first
+                    # before QAT
+                    if self.is_pruned_channel and not force_prune_channel:
+                        warnings.warn("Model has been pruned before to force for a repruning specify force_prune_channel as True")
+                        continue
+
                     model.apply(prune_channel_layer)
+                    model.init_prune_channel()
 
             elif compression_type == "quantize":
-                def quantize_layer(layer):
-                    layer.is_quantized = True
+                def quantize_layer(layer): layer.is_quantized = True
 
                 if config["quantize"]["scheme"] != QuantizationScheme.NONE:
 
@@ -456,8 +462,9 @@ class Sequential(nn.Sequential):
                     if config["quantize"]["scheme"] == QuantizationScheme.STATIC and calibration_data is None:
                         raise ValueError(f"Pass a calibration data when doing static quantization!")
 
-                    model.init_quantize(calibration_data)
+                    # Setting the quantization flag before quantization because it is needed for calibration 
                     model.apply(quantize_layer)
+                    model.init_quantize(calibration_data)
             else:
                 raise NotImplementedError(f"Compression of type {compression_type} not implemented!")
 
@@ -614,7 +621,7 @@ class Sequential(nn.Sequential):
 
 
     
-    def init_prune_channel(self, force_prune_channel:bool=False) -> None:
+    def init_prune_channel(self) -> None:
         """
         Executes Structured Channel Pruning.
 
@@ -628,12 +635,7 @@ class Sequential(nn.Sequential):
             - Modifies layers in-place by attaching binary masks to weights.
             - Updates layer metadata to reflect reduced input/output shapes.
         """
-        # To prevent weight reselection especially in case of two step training
-        # since the weight are not modified in place when pruning is done first
-        #  before QAT
-        if self.is_pruned_channel and not force_prune_channel:
-            warnings.warn("Model has been pruned before to force for a repruning specify force_prune_channel as Tre")
-            return
+
         input_shape = self.__dict__["_dmc"]["input_shape"]
         sparsity = self.__dict__["_dmc"]["compression_config"]["prune_channel"]["sparsity"]
         metric = self.__dict__["_dmc"]["compression_config"]["prune_channel"]["metric"]
