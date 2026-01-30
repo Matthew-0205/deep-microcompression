@@ -8,13 +8,14 @@ preceding Conv2d layer (see `fuse.py`) to enable Static Quantization .
 """
 
 import math
+import warnings
 from typing import Optional
 
 import torch
 from torch import nn
 
 from .layer import Layer
-from ..compressors import Prune_Channel, Quantize
+from ..compressors import Prune_Channel, Quantize, QuantizationScheme
 
 from ..utils import (
     convert_tensor_to_bytes_var,
@@ -120,8 +121,9 @@ class BatchNorm2d(Layer, nn.BatchNorm2d):
         or dynamic quantization.
         """
         super().init_quantize(parameter_bitwidth, granularity, scheme, activation_bitwidth, previous_output_quantize)
-        # if scheme == QuantizationScheme.STATIC:
-        #     raise RuntimeError("Can not perform static quantization with BatchNorm2d, fuse the model first!")
+        if scheme == QuantizationScheme.STATIC:
+            warnings.warn("You are preforming static quantization with a model with batchnorm, "
+                          " it best to fuse it first before quantizing the model")
             
         return previous_output_quantize
 
