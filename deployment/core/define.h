@@ -238,13 +238,13 @@ inline uint8_t get_granularity(uint8_t quantize_property) {
 
 inline void get_activation_write_packed_intb(uint8_t quantize_property,  void (**activation_write_packed_intb_addr) (int8_t*, uint32_t, int8_t)) {
     switch (get_activation_bitwidth(quantize_property)) {
-        case INT8:
+        case BITWIDTH_8:
             *activation_write_packed_intb_addr = activation_write_packed_int8;
             break;
-        case INT4:
+        case BITWIDTH_4:
             *activation_write_packed_intb_addr = activation_write_packed_int4;
             break;
-        case INT2:
+        case BITWIDTH_2:
             *activation_write_packed_intb_addr = activation_write_packed_int2;
             break;
     }
@@ -253,13 +253,13 @@ inline void get_activation_write_packed_intb(uint8_t quantize_property,  void (*
 
 inline void get_activation_read_packed_intb(uint8_t quantize_property, int8_t (**activation_read_packed_intb_addr) (int8_t*, uint32_t)) {
     switch (get_activation_bitwidth(quantize_property)) {
-        case INT8:
+        case BITWIDTH_8:
             *activation_read_packed_intb_addr = activation_read_packed_int8;
             break;
-        case INT4:
+        case BITWIDTH_4:
             *activation_read_packed_intb_addr = activation_read_packed_int4;
             break;
-        case INT2:
+        case BITWIDTH_2:
             *activation_read_packed_intb_addr = activation_read_packed_int2;
             break;
     }
@@ -268,13 +268,13 @@ inline void get_activation_read_packed_intb(uint8_t quantize_property, int8_t (*
 
 inline void get_parameter_read_packed_intb(uint8_t quantize_property, int8_t (**parameter_read_packed_intb_addr) (const int8_t*, uint32_t)) {
     switch (get_parameter_bitwidth(quantize_property)) {
-        case INT8:
+        case BITWIDTH_8:
             *parameter_read_packed_intb_addr = parameter_read_packed_int8;
             break;
-        case INT4:
+        case BITWIDTH_4:
             *parameter_read_packed_intb_addr = parameter_read_packed_int4;
             break;
-        case INT2:
+        case BITWIDTH_2:
             *parameter_read_packed_intb_addr = parameter_read_packed_int2;
             break;
     }
@@ -283,13 +283,13 @@ inline void get_parameter_read_packed_intb(uint8_t quantize_property, int8_t (**
 
 inline void get_activation_clamp_intb(uint8_t quantize_property, int8_t (**clamp_intb_addr) (int32_t)) {
     switch (get_activation_bitwidth(quantize_property)) {
-        case INT8:
+        case BITWIDTH_8:
             *clamp_intb_addr = clamp_int8;
             break;
-        case INT4:
+        case BITWIDTH_4:
             *clamp_intb_addr = clamp_int4;
             break;
-        case INT2:
+        case BITWIDTH_2:
             *clamp_intb_addr = clamp_int2;
             break;
     }
@@ -298,11 +298,11 @@ inline void get_activation_clamp_intb(uint8_t quantize_property, int8_t (**clamp
 
 inline uint8_t get_activation_data_per_byte(uint8_t quantize_property) {
     switch (get_activation_bitwidth(quantize_property)) {
-        case INT8:
+        case BITWIDTH_8:
             return DATA_PER_BYTE_int8;
-        case INT4:
+        case BITWIDTH_4:
             return DATA_PER_BYTE_int4;
-        case INT2:
+        case BITWIDTH_2:
             return DATA_PER_BYTE_int2;
     }
     return 0;

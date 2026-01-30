@@ -37,20 +37,16 @@
 // 4. Bitwidth Encoding
 // ----------------------------------------------------------------------------
 // Aligned with packed-int encoding
-//   INT8 = 0b11
-//   INT4 = 0b10
-//   INT2 = 0b01
+//   BITWIDTH_8 = 0b11
+//   BITWIDTH_4 = 0b10
+//   BITWIDTH_2 = 0b01
 //   INT1 = 0b00  (used as "absent")
 // ============================================================================
-#define INT8 0b11
-#define INT4 0b10
-#define INT2 0b01
-#define INT1 0b00
 
-#define BITWIDTH_8 INT8
-#define BITWIDTH_4 INT4
-#define BITWIDTH_2 INT2
-#define BITWIDTH_1 INT1
+#define BITWIDTH_8 0b11
+#define BITWIDTH_4 0b10
+#define BITWIDTH_2 0b01
+#define BITWIDTH_1 0b00
 
 
 // ============================================================================
@@ -170,13 +166,13 @@
 #define IS_PER_CHANNEL(qprop) (GET_GRANULARITY(qprop) == PER_CHANNEL)
 #define IS_PER_TENSOR(qprop)  (GET_GRANULARITY(qprop) == PER_TENSOR)
 
-#define PARAM_IS_INT8(qprop)  (GET_PARAMETER_BITWIDTH(qprop) == INT8)
-#define PARAM_IS_INT4(qprop)  (GET_PARAMETER_BITWIDTH(qprop) == INT4)
-#define PARAM_IS_INT2(qprop)  (GET_PARAMETER_BITWIDTH(qprop) == INT2)
+#define PARAM_IS_INT8(qprop)  (GET_PARAMETER_BITWIDTH(qprop) == BITWIDTH_8)
+#define PARAM_IS_INT4(qprop)  (GET_PARAMETER_BITWIDTH(qprop) == BITWIDTH_4)
+#define PARAM_IS_INT2(qprop)  (GET_PARAMETER_BITWIDTH(qprop) == BITWIDTH_2)
 
-#define ACT_IS_INT8(qprop)    (GET_ACTIVATION_BITWIDTH(qprop) == INT8)
-#define ACT_IS_INT4(qprop)    (GET_ACTIVATION_BITWIDTH(qprop) == INT4)
-#define ACT_IS_INT2(qprop)    (GET_ACTIVATION_BITWIDTH(qprop) == INT2)
+#define ACT_IS_INT8(qprop)    (GET_ACTIVATION_BITWIDTH(qprop) == BITWIDTH_8)
+#define ACT_IS_INT4(qprop)    (GET_ACTIVATION_BITWIDTH(qprop) == BITWIDTH_4)
+#define ACT_IS_INT2(qprop)    (GET_ACTIVATION_BITWIDTH(qprop) == BITWIDTH_2)
 
 
 #endif // QUANTIZATION_PROPERTIES_H
