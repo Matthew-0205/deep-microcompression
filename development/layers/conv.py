@@ -59,7 +59,7 @@ class Conv2d(Layer, nn.Conv2d):
         """Initialize Conv2d layer with standard PyTorch parameters"""
         # Enforce usage of explicit pad instead of built-in padding arg
         if "padding" in kwargs:
-            assert kwargs["padding"] == 0, "Use padding module instead of padding to pad input"
+            assert kwargs["padding"] == 0 or kwargs["padding"] == (0, 0), "Use padding module instead of padding to pad input"
         else:
             kwargs["padding"] = 0
 
@@ -592,6 +592,11 @@ class Conv2d(Layer, nn.Conv2d):
                 bias_scale = self.bias_quantize.scale
             else:
                 bias_scale = self.input_quantize.scale * self.weight_quantize.scale
+
+            # removing scales for channels that have been pruned away
+            if self.is_pruned_channel and granularity == QuantizationGranularity.PER_CHANNEL:
+                bias_scale = self.bias_prune_channel.apply(bias_scale)
+        
             param_header, param_def = convert_tensor_to_bytes_var(
                 bias_scale,
                 f"{var_name}_bias_scale",

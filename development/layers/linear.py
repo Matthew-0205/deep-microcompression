@@ -94,8 +94,6 @@ class Linear(Layer, nn.Linear):
                 if hasattr(self, "output_quantize"):
                     output = self.output_quantize(output)
 
-                    # print(self.input_quantize.zero_point, self)
-
         return output
     
 
@@ -369,7 +367,7 @@ class Linear(Layer, nn.Linear):
             bias_bitwidth = None
             if self.is_quantized and hasattr(self, "bias_quantize"):
                 bias_bitwidth = self.bias_quantize.bitwidth
-                # print(bias.dtype, "in linear bias dtype")
+
             param_header, param_def = convert_tensor_to_bytes_var(
                 bias, 
                 f"{var_name}_bias",
@@ -378,7 +376,6 @@ class Linear(Layer, nn.Linear):
             )
             layer_header += param_header
             layer_param_def += param_def
-            # print("----------->utilis after", param_def)
 
         scheme = None
         if self.is_quantized:
@@ -429,7 +426,6 @@ class Linear(Layer, nn.Linear):
             )
             layer_header += param_header
             layer_param_def += param_def
-            # print("----------->utilis after", layer_param_def)
             
         elif scheme == QuantizationScheme.STATIC:
             
@@ -508,6 +504,11 @@ class Linear(Layer, nn.Linear):
                 bias_scale = self.bias_quantize.scale
             else:
                 bias_scale = self.input_quantize.scale * self.weight_quantize.scale
+
+            # removing scales for channels that have been pruned away
+            if self.is_pruned_channel and granularity == QuantizationGranularity.PER_CHANNEL:
+                bias_scale = self.bias_prune_channel.apply(bias_scale)
+        
             param_header, param_def = convert_tensor_to_bytes_var(
                 bias_scale,
                 f"{var_name}_bias_scale",
